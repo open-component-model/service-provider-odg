@@ -394,7 +394,11 @@ func main() {
 
 	clusterAccessReconciler := advanced.NewClusterAccessReconciler(platformCluster.Client(), providerName)
 	if debugEnabled() {
+		{{- if .WithWorkloadCluster }}
+		clusterAccessReconciler = localaccess.NewLocalAdvancedClusterAccessReconciler(clusterAccessReconciler, localaccess.WithWorkloadCluster())
+		{{- else }}
 		clusterAccessReconciler = localaccess.NewLocalAdvancedClusterAccessReconciler(clusterAccessReconciler)
+		{{- end }}
 	}
 
 	clusterAccessReconciler.
@@ -426,7 +430,7 @@ func main() {
 		}).
 		AdvancedClusterAccessReconciler(clusterAccessReconciler).
 		MustBuild()
-	if err := spr.SetupWithManager(mgr, "{{.KindLower}}"); err != nil {
+	if err := spr.SetupWithManager(mgr, providerName); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "{{.Kind}}")
 		os.Exit(1)
 	}
