@@ -1,4 +1,4 @@
-module github.com/openmcp-project/service-provider-template
+module github.com/open-component-model/service-provider-odg
 
 go 1.26.5
 

@@ -25,82 +25,82 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// {{.Kind}}Spec defines the desired state of {{.Kind}}
-type {{.Kind}}Spec struct {
+// ODGSpec defines the desired state of ODG
+type ODGSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 	// The following markers will use OpenAPI v3 schema to validate the value
 	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
 
-	// foo is an example field of {{.Kind}}. Edit {{.KindLower}}_types.go to remove/update
+	// foo is an example field of ODG. Edit odg_types.go to remove/update
 	// +optional
 	Foo *string `json:"foo,omitempty"`
 }
 
-// {{.Kind}}Status defines the observed state of {{.Kind}}.
-type {{.Kind}}Status struct {
+// ODGStatus defines the observed state of ODG.
+type ODGStatus struct {
 	commonapi.Status `json:",inline"`
 }
 
-// {{.Kind}} is the Schema for the {{.KindLower}}s API
+// ODG is the Schema for the odgs API
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:JSONPath=`.status.phase`,name="Phase",type=string
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:metadata:labels="openmcp.cloud/cluster=onboarding"
-type {{.Kind}} struct {
+type ODG struct {
 	metav1.TypeMeta `json:",inline"`
 
 	// metadata is a standard object metadata
 	// +optional
 	metav1.ObjectMeta `json:"metadata,omitempty,omitzero"`
 
-	// spec defines the desired state of {{.Kind}}
+	// spec defines the desired state of ODG
 	// +required
-	Spec {{.Kind}}Spec `json:"spec"`
+	Spec ODGSpec `json:"spec"`
 
-	// status defines the observed state of {{.Kind}}
+	// status defines the observed state of ODG
 	// +optional
-	Status {{.Kind}}Status `json:"status,omitempty,omitzero"`
+	Status ODGStatus `json:"status,omitempty,omitzero"`
 }
 
 // +kubebuilder:object:root=true
 
-// {{.Kind}}List contains a list of {{.Kind}}
-type {{.Kind}}List struct {
+// ODGList contains a list of ODG
+type ODGList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []{{.Kind}} `json:"items"`
+	Items           []ODG `json:"items"`
 }
 
 func init() {
 	SchemeBuilder.Register(func(s *runtime.Scheme) error {
-		s.AddKnownTypes(GroupVersion, &{{.Kind}}{}, &{{.Kind}}List{})
+		s.AddKnownTypes(GroupVersion, &ODG{}, &ODGList{})
 		return nil
 	})
 }
 
-// Finalizer returns the finalizer string for the {{.Kind}} resource
-func (o *{{.Kind}}) Finalizer() string {
+// Finalizer returns the finalizer string for the ODG resource
+func (o *ODG) Finalizer() string {
 	return GroupVersion.Group + "/finalizer"
 }
 
-// GetStatus returns the status of the {{.Kind}} resource
-func (o *{{.Kind}}) GetStatus() any {
+// GetStatus returns the status of the ODG resource
+func (o *ODG) GetStatus() any {
 	return o.Status
 }
 
-// GetConditions returns the conditions of the {{.Kind}} resource
-func (o *{{.Kind}}) GetConditions() *[]metav1.Condition {
+// GetConditions returns the conditions of the ODG resource
+func (o *ODG) GetConditions() *[]metav1.Condition {
 	return &o.Status.Conditions
 }
 
-// SetPhase sets the phase of the {{.Kind}} resource status
-func (o *{{.Kind}}) SetPhase(phase string) {
+// SetPhase sets the phase of the ODG resource status
+func (o *ODG) SetPhase(phase string) {
 	o.Status.Phase = phase
 }
 
-// SetObservedGeneration sets the observed generation of the {{.Kind}} resource
-func (o *{{.Kind}}) SetObservedGeneration(gen int64) {
+// SetObservedGeneration sets the observed generation of the ODG resource
+func (o *ODG) SetObservedGeneration(gen int64) {
 	o.Status.ObservedGeneration = gen
 }

@@ -20,11 +20,8 @@ import (
 	"context"
 	"time"
 
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-
-	{{- if .WithSecretWatcher }}
 	corev1 "k8s.io/api/core/v1"
-	{{- end }}
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -36,22 +33,21 @@ import (
 	clusteraccess "github.com/openmcp-project/opencontrolplane-runtime/pkg/serviceprovider/clusteraccess"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	apiv1alpha1 "github.com/openmcp-project/service-provider-template/api/v1alpha1"
+	apiv1alpha1 "github.com/open-component-model/service-provider-odg/api/v1alpha1"
 )
 
-// {{.Kind}}Reconciler reconciles a {{.Kind}} object
-type {{.Kind}}Reconciler struct {
-	// OnboardingCluster is the cluster where this controller watches {{.Kind}} resources and reacts to their changes.
+// ODGReconciler reconciles a ODG object
+type ODGReconciler struct {
+	// OnboardingCluster is the cluster where this controller watches ODG resources and reacts to their changes.
 	OnboardingCluster *clusters.Cluster
 	// PlatformCluster is the cluster where this controller is deployed and configured.
-	PlatformCluster   *clusters.Cluster
+	PlatformCluster *clusters.Cluster
 	// PodNamespace is the namespace where this controller is deployed in.
 	PodNamespace string
 }
 
 // CreateOrUpdate is called on every add or update event
-func (r *{{.Kind}}Reconciler) CreateOrUpdate(ctx context.Context, svcobj *apiv1alpha1.{{.Kind}}, _ *apiv1alpha1.ProviderConfig, clusters clusteraccess.ClusterContext) (ctrl.Result, error) {
-{{- if .WithExample }}
+func (r *ODGReconciler) CreateOrUpdate(ctx context.Context, svcobj *apiv1alpha1.ODG, _ *apiv1alpha1.ProviderConfig, clusters clusteraccess.ClusterContext) (ctrl.Result, error) {
 	l := logf.FromContext(ctx)
 	serviceprovider.StatusProgressing(svcobj, "Reconciling", "Reconcile in progress")
 	managedObj := &apiextensionsv1.CustomResourceDefinition{
@@ -67,15 +63,11 @@ func (r *{{.Kind}}Reconciler) CreateOrUpdate(ctx context.Context, svcobj *apiv1a
 		return ctrl.Result{}, err
 	}
 	serviceprovider.StatusReady(svcobj)
-{{- else }}
-	// TODO
-{{- end }}
 	return ctrl.Result{}, nil
 }
 
 // Delete is called on every delete event
-func (r *{{.Kind}}Reconciler) Delete(ctx context.Context, obj *apiv1alpha1.{{.Kind}}, _ *apiv1alpha1.ProviderConfig, clusters clusteraccess.ClusterContext) (ctrl.Result, error) {
-{{- if .WithExample }}
+func (r *ODGReconciler) Delete(ctx context.Context, obj *apiv1alpha1.ODG, _ *apiv1alpha1.ProviderConfig, clusters clusteraccess.ClusterContext) (ctrl.Result, error) {
 	l := logf.FromContext(ctx)
 	serviceprovider.StatusTerminating(obj)
 	managedObj := fooCRD()
@@ -90,18 +82,13 @@ func (r *{{.Kind}}Reconciler) Delete(ctx context.Context, obj *apiv1alpha1.{{.Ki
 	return ctrl.Result{
 		RequeueAfter: time.Second * 10,
 	}, nil
-{{- else }}
-	// TODO
-	return ctrl.Result{}, nil
-{{- end }}
 }
 
-{{- if .WithSecretWatcher }}
 // IsReferencedSecret returns true if the given secret should trigger
 // reconciliation. See serviceprovider.SecretWatcher for details.
 //
 //revive:disable:unused-parameter
-func (r *{{.Kind}}Reconciler) IsReferencedSecret(ctx context.Context, secret *corev1.Secret, pc *apiv1alpha1.ProviderConfig) bool {
+func (r *ODGReconciler) IsReferencedSecret(ctx context.Context, secret *corev1.Secret, pc *apiv1alpha1.ProviderConfig) bool {
 	if pc == nil {
 		return false
 	}
@@ -113,8 +100,7 @@ func (r *{{.Kind}}Reconciler) IsReferencedSecret(ctx context.Context, secret *co
 	// }
 	return false
 }
-{{- end }}
-{{ if .WithExample }}
+
 func fooCRD() *apiextensionsv1.CustomResourceDefinition {
 	return &apiextensionsv1.CustomResourceDefinition{
 		ObjectMeta: metav1.ObjectMeta{
@@ -152,4 +138,3 @@ func fooCRD() *apiextensionsv1.CustomResourceDefinition {
 		},
 	}
 }
-{{- end }}

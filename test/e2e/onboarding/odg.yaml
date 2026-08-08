@@ -1,6 +1,6 @@
 apiVersion: odg.services.open-control-plane.io/v1alpha1
-kind: ProviderConfig
+kind: ODG
 metadata:
-  name: odg
+  name: test-mcp
 spec:
-  pollInterval: 1m
+  foo: bar

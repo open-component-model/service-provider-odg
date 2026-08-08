@@ -18,9 +18,7 @@ import (
 )
 
 func TestServiceProvider(t *testing.T) {
-{{- if .WithExample}}
 	var onboardingList unstructured.UnstructuredList
-{{- end }}
 	basicProviderTest := features.New("provider test").
 		Setup(func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
 			if _, err := resources.CreateObjectsFromDir(ctx, c, "platform"); err != nil {
@@ -29,7 +27,6 @@ func TestServiceProvider(t *testing.T) {
 			return ctx
 		}).
 		Setup(providers.CreateMCP("test-mcp")).
-{{- if .WithExample}}
 		Assess("verify service can be successfully consumed",
 			func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
 				onboardingConfig, err := clusterutils.OnboardingConfig()
@@ -65,9 +62,6 @@ func TestServiceProvider(t *testing.T) {
 			}
 			return ctx
 		}).
-{{- else }}
-		// TODO add assess steps
-{{- end }}
 		Teardown(providers.DeleteMCP("test-mcp", wait.WithTimeout(5*time.Minute)))
 	testenv.Test(t, basicProviderTest.Feature())
 }

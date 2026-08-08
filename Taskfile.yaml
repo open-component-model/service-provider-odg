@@ -5,8 +5,8 @@ vars:
   API_DIRS: '{{.ROOT_DIR}}/api/v1alpha1/...'
   MANIFEST_OUT: '{{.ROOT_DIR}}/api/crds/manifests'
   CODE_DIRS: '{{.ROOT_DIR}}/cmd/... {{.ROOT_DIR}}/internal/... {{.ROOT_DIR}}/api/v1alpha1/...'
-  COMPONENTS: 'service-provider-template'
-  REPO_URL: 'https://github.com/openmcp-project/service-provider-template'
+  COMPONENTS: 'service-provider-odg'
+  REPO_URL: 'https://github.com/open-component-model/service-provider-odg'
   COMMON_SCRIPT_DIR: '{{.ROOT_DIR}}/hack/common'
 
 includes:
