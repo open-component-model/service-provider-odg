@@ -27,10 +27,6 @@ jobs:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Generate template
-        run: |
-          go run ./cmd/template -v -w -s
-
       - name: task generate
         run: |
           task generate --verbose
