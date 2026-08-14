@@ -40,7 +40,6 @@ import (
 	"github.com/openmcp-project/openmcp-operator/lib/utils"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/open-component-model/service-provider-odg/api/crds"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiextensionv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -55,10 +54,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	odgsv1alpha1 "github.com/open-component-model/service-provider-odg/api/v1alpha1"
-	"github.com/open-component-model/service-provider-odg/internal/controller"
+	"github.com/open-component-model/service-provider-odg/api/crds"
+
 	"github.com/openmcp-project/opencontrolplane-runtime/pkg/serviceprovider"
 	localaccess "github.com/openmcp-project/opencontrolplane-runtime/pkg/serviceprovider/clusteraccess"
+
+	odgsv1alpha1 "github.com/open-component-model/service-provider-odg/api/v1alpha1"
+	"github.com/open-component-model/service-provider-odg/internal/controller"
 	// +kubebuilder:scaffold:imports
 )
 
