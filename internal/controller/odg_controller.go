@@ -54,6 +54,8 @@ type ODGReconciler struct {
 	PlatformCluster *clusters.Cluster
 	// PodNamespace is the namespace where this controller is deployed in.
 	PodNamespace string
+	// ProviderName is the name of the service provider.
+	ProviderName string
 }
 
 const (
@@ -72,9 +74,6 @@ const (
 	// requestSuffixWorkload is the suffix used for the workload cluster.
 	requestSuffixWorkload = "--wl"
 )
-
-// clusterAccessName is the name of the access object containing the kubeconfig for the workload target cluster.
-var clusterAccessName = apiv1alpha1.GroupVersion.Group
 
 // CreateOrUpdate is called on every add or update event
 func (r *ODGReconciler) CreateOrUpdate(ctx context.Context, svcobj *apiv1alpha1.ODG, providerConfig *apiv1alpha1.ProviderConfig, clusters clusteraccess.ClusterContext) (ctrl.Result, error) {
@@ -391,7 +390,7 @@ func stableRequestNameFromLocalName(controllerName, localName string) string {
 func (r *ODGReconciler) getWorkloadFluxConfig(ctx context.Context, namespace, objectName string) (*meta.SecretKeyReference, error) {
 	workloadAccessRequest := &clustersv1alpha1.AccessRequest{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      stableRequestNameFromLocalName(clusterAccessName, objectName) + requestSuffixWorkload,
+			Name:      stableRequestNameFromLocalName(r.ProviderName, objectName) + requestSuffixWorkload,
 			Namespace: namespace,
 		},
 	}

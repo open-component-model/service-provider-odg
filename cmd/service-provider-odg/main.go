@@ -418,6 +418,7 @@ func main() {
 			OnboardingCluster: onboardingCluster,
 			PlatformCluster:   platformCluster,
 			PodNamespace:      podNamespace,
+			ProviderName:      providerName,
 		}).
 		AdvancedClusterAccessReconciler(clusterAccessReconciler).
 		MustBuild()
