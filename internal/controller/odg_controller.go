@@ -285,7 +285,7 @@ func (r *ODGReconciler) replicateWorkloadImagePullSecrets(ctx context.Context, w
 	}
 
 	if workloadCluster == nil {
-		return fmt.Errorf("workload cluster is required to replicate image pull secrets but was nil")
+		return nil
 	}
 
 	platformClient := r.PlatformCluster.Client()
