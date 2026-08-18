@@ -17,10 +17,13 @@ limitations under the License.
 package v1alpha1
 
 import (
-	commonapi "github.com/openmcp-project/openmcp-operator/api/common"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
+
+// DefaultReleaseName provides the default value for the helm release of the odg controller.
+const DefaultReleaseName = "odg"
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
@@ -37,9 +40,63 @@ type ODGSpec struct {
 	Foo *string `json:"foo,omitempty"`
 }
 
+// InstancePhase is a custom type representing the phase of a service instance.
+type InstancePhase string
+
+// ResourceLocation is a custom type representing the location of a resource.
+type ResourceLocation string
+
+// Constants representing the phases of an instance lifecycle and the
+// locations where managed resources can live.
+const (
+	Pending     InstancePhase = "Pending"
+	Progressing InstancePhase = "Progressing"
+	Ready       InstancePhase = "Ready"
+	Failed      InstancePhase = "Failed"
+	Terminating InstancePhase = "Terminating"
+	Unknown     InstancePhase = "Unknown"
+
+	ManagedControlPlane ResourceLocation = "ManagedControlPlane"
+	PlatformCluster     ResourceLocation = "PlatformCluster"
+)
+
+// ManagedResource defines a kubernetes object with its lifecycle phase.
+type ManagedResource struct {
+	corev1.TypedObjectReference `json:",inline"`
+
+	// +required
+	Phase InstancePhase `json:"phase"`
+	// +optional
+	Message string `json:"message,omitempty"`
+	// +optional
+	Location ResourceLocation `json:"location,omitempty"`
+}
+
 // ODGStatus defines the observed state of ODG.
 type ODGStatus struct {
-	commonapi.Status `json:",inline"`
+	// For Kubernetes API conventions, see:
+	// https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#typical-status-properties
+
+	// conditions represent the current state of the OCM resource.
+	// Each condition has a unique type and reflects the status of a specific aspect of the resource.
+	//
+	// Standard condition types include:
+	// - "Available": the resource is fully functional
+	// - "Progressing": the resource is being created or updated
+	// - "Degraded": the resource failed to reach or maintain its desired state
+	//
+	// The status of each condition is one of True, False, or Unknown.
+	// +listType=map
+	// +listMapKey=type
+	// +optional
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+	// ObservedGeneration is the generation of this resource that was last reconciled by the controller.
+	ObservedGeneration int64 `json:"observedGeneration"`
+	// Phase is the current phase of the resource.
+	Phase string `json:"phase"`
+	// Resources managed by this OCM instance.
+	// +optional
+	Resources []ManagedResource `json:"resources,omitempty"`
 }
 
 // ODG is the Schema for the odgs API

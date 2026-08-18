@@ -57,7 +57,16 @@ spec:
             description: status defines the observed state of ODG
             properties:
               conditions:
-                description: Conditions contains the conditions.
+                description: |-
+                  conditions represent the current state of the OCM resource.
+                  Each condition has a unique type and reflects the status of a specific aspect of the resource.
+
+                  Standard condition types include:
+                  - "Available": the resource is fully functional
+                  - "Progressing": the resource is being created or updated
+                  - "Degraded": the resource failed to reach or maintain its desired state
+
+                  The status of each condition is one of True, False, or Unknown.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -124,6 +133,46 @@ spec:
               phase:
                 description: Phase is the current phase of the resource.
                 type: string
+              resources:
+                description: Resources managed by this OCM instance.
+                items:
+                  description: ManagedResource defines a kubernetes object with its
+                    lifecycle phase.
+                  properties:
+                    apiGroup:
+                      description: |-
+                        APIGroup is the group for the resource being referenced.
+                        If APIGroup is not specified, the specified Kind must be in the core API group.
+                        For any other third-party types, APIGroup is required.
+                      type: string
+                    kind:
+                      description: Kind is the type of resource being referenced
+                      type: string
+                    location:
+                      description: ResourceLocation is a custom type representing
+                        the location of a resource.
+                      type: string
+                    message:
+                      type: string
+                    name:
+                      description: Name is the name of resource being referenced
+                      type: string
+                    namespace:
+                      description: |-
+                        Namespace is the namespace of resource being referenced
+                        Note that when a namespace is specified, a gateway.networking.k8s.io/ReferenceGrant object is required in the referent namespace to allow that namespace's owner to accept the reference. See the ReferenceGrant documentation for details.
+                        (Alpha) This field requires the CrossNamespaceVolumeDataSource feature gate to be enabled.
+                      type: string
+                    phase:
+                      description: InstancePhase is a custom type representing the
+                        phase of a service instance.
+                      type: string
+                  required:
+                  - kind
+                  - name
+                  - phase
+                  type: object
+                type: array
             required:
             - observedGeneration
             - phase

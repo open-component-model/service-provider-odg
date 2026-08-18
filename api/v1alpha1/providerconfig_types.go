@@ -17,8 +17,10 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"strings"
 	"time"
 
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -38,6 +40,34 @@ type ProviderConfigSpec struct {
 	// +kubebuilder:default:="1m"
 	// +kubebuilder:validation:Format=duration
 	PollInterval *metav1.Duration `json:"pollInterval,omitempty"`
+
+	Versions []OCMVersion `json:"versions"`
+}
+
+// OCMVersion defines a version of the ocm-k8s-toolkit that can be installed.
+type OCMVersion struct {
+	// ChartVersion is the tag of the Helm chart to install.
+	// +required
+	ChartVersion string `json:"chartVersion"`
+
+	// ChartURL is a reference to an OCI repository that hosts the ocm-k8s-toolkit Helm chart.
+	// An "oci://" prefix is added automatically when missing.
+	// +optional
+	// +kubebuilder:default="oci://ghcr.io/open-component-model/kubernetes/controller/chart"
+	ChartURL *string `json:"chartURL,omitempty"`
+
+	// ChartPullSecretName is the name of a secret in the controller's namespace holding the
+	// credentials to pull the Helm chart. It is replicated into the tenant namespace and
+	// wired as secretRef on the OCIRepository.
+	// The secret must be of type kubernetes.io/dockerconfigjson.
+	// +optional
+	ChartPullSecretName string `json:"chartPullSecretName,omitempty"`
+
+	// HelmValues are arbitrary Helm values passed directly to the managed HelmRelease.
+	// Secrets referenced under `manager.imagePullSecrets` are replicated from the
+	// controller's namespace into the ocm-k8s-toolkit namespace on the control plane.
+	// +optional
+	HelmValues *apiextensionsv1.JSON `json:"helmValues,omitempty"`
 }
 
 // ProviderConfigStatus defines the observed state of ProviderConfig.
@@ -104,4 +134,12 @@ func init() {
 func (o *ProviderConfig) PollInterval() time.Duration {
 	// TODO pollInterval has to be required
 	return o.Spec.PollInterval.Duration
+}
+
+// EnsureOCIScheme prefixes the given URL with "oci://" unless it already has the scheme.
+func EnsureOCIScheme(url string) string {
+	if !strings.HasPrefix(url, "oci://") {
+		return "oci://" + url
+	}
+	return url
 }

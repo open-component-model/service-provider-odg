@@ -3,6 +3,9 @@ module github.com/open-component-model/service-provider-odg
 go 1.26.5
 
 require (
+	github.com/fluxcd/helm-controller/api v1.6.2
+	github.com/fluxcd/pkg/apis/meta v1.30.1
+	github.com/fluxcd/source-controller/api v1.9.3
 	github.com/openmcp-project/controller-utils v0.31.0
 	github.com/openmcp-project/opencontrolplane-runtime v1.3.0
 	github.com/openmcp-project/openmcp-operator/api v1.3.0
@@ -20,6 +23,8 @@ require (
 	github.com/antlr4-go/antlr/v4 v4.13.0 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
+	github.com/fluxcd/pkg/apis/acl v0.10.0 // indirect
+	github.com/fluxcd/pkg/apis/kustomize v1.20.0 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-openapi/swag/cmdutils v0.26.0 // indirect
 	github.com/go-openapi/swag/conv v0.26.0 // indirect

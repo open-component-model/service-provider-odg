@@ -28,6 +28,8 @@ import (
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
+	helmv2 "github.com/fluxcd/helm-controller/api/v2"
+	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	"github.com/openmcp-project/controller-utils/pkg/clusters"
 	crdutil "github.com/openmcp-project/controller-utils/pkg/crds"
 	"github.com/openmcp-project/controller-utils/pkg/logging"
@@ -86,6 +88,8 @@ func initPlatformScheme() {
 	utilruntime.Must(odgsv1alpha1.AddToScheme(platformScheme))
 	utilruntime.Must(clustersv1alpha1.AddToScheme(platformScheme))
 	utilruntime.Must(providerv1alpha1.AddToScheme(platformScheme))
+	utilruntime.Must(sourcev1.AddToScheme(platformScheme))
+	utilruntime.Must(helmv2.AddToScheme(platformScheme))
 }
 
 func initOnboardingScheme() {
