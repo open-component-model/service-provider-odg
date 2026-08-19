@@ -53,7 +53,7 @@ type ODGVersion struct {
 	// ChartURL is a reference to an OCI repository that hosts the ODG Helm chart.
 	// An "oci://" prefix is added automatically when missing.
 	// +optional
-	// +kubebuilder:default="oci://ghcr.io/open-component-model/kubernetes/controller/chart"
+	// +kubebuilder:default="oci://europe-docker.pkg.dev/gardener-project/releases/charts/odg/delivery-dashboard"
 	ChartURL *string `json:"chartURL,omitempty"`
 
 	// ChartPullSecretName is the name of a secret in the controller's namespace holding the
