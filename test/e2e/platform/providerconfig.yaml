@@ -5,9 +5,8 @@ metadata:
 spec:
   pollInterval: 1m
   versions:
-    # renovate: datasource=docker depName=ghcr.io/open-component-model/kubernetes/controller/chart
-    - chartVersion: "0.13.0"
-      chartURL: oci://ghcr.io/open-component-model/kubernetes/controller/chart
+    - chartVersion: "0.439.0"
+      chartURL: oci://europe-docker.pkg.dev/gardener-project/releases/charts/odg/delivery-dashboard
       chartPullSecretName: privateregcred
       helmValues:
         manager:

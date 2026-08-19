@@ -41,16 +41,16 @@ type ProviderConfigSpec struct {
 	// +kubebuilder:validation:Format=duration
 	PollInterval *metav1.Duration `json:"pollInterval,omitempty"`
 
-	Versions []OCMVersion `json:"versions"`
+	Versions []ODGVersion `json:"versions"`
 }
 
-// OCMVersion defines a version of the ocm-k8s-toolkit that can be installed.
-type OCMVersion struct {
+// ODGVersion defines a version of the ODG that can be installed.
+type ODGVersion struct {
 	// ChartVersion is the tag of the Helm chart to install.
 	// +required
 	ChartVersion string `json:"chartVersion"`
 
-	// ChartURL is a reference to an OCI repository that hosts the ocm-k8s-toolkit Helm chart.
+	// ChartURL is a reference to an OCI repository that hosts the ODG Helm chart.
 	// An "oci://" prefix is added automatically when missing.
 	// +optional
 	// +kubebuilder:default="oci://ghcr.io/open-component-model/kubernetes/controller/chart"
@@ -65,7 +65,7 @@ type OCMVersion struct {
 
 	// HelmValues are arbitrary Helm values passed directly to the managed HelmRelease.
 	// Secrets referenced under `manager.imagePullSecrets` are replicated from the
-	// controller's namespace into the ocm-k8s-toolkit namespace on the control plane.
+	// controller's namespace into the ODG namespace on the control plane.
 	// +optional
 	HelmValues *apiextensionsv1.JSON `json:"helmValues,omitempty"`
 }
