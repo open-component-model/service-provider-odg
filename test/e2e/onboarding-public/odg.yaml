@@ -1,0 +1,6 @@
+apiVersion: odg.services.open-control-plane.io/v1alpha1
+kind: ODG
+metadata:
+  name: test-mcp-public
+spec:
+  foo: bar

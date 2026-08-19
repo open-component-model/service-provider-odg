@@ -86,6 +86,11 @@ func (r *ODGReconciler) CreateOrUpdate(ctx context.Context, svcobj *apiv1alpha1.
 		return ctrl.Result{}, fmt.Errorf("failed to determine stable namespace for ODG instance: %w", err)
 	}
 
+	if err := r.ensureTenantNamespace(ctx, tenantNamespace); err != nil {
+		serviceprovider.StatusProgressing(svcobj, conditionReasonError, err.Error())
+		return ctrl.Result{}, err
+	}
+
 	if err := r.replicateChartPullSecret(ctx, version.ChartPullSecretName, types.NamespacedName{Name: version.ChartPullSecretName, Namespace: tenantNamespace}); err != nil {
 		serviceprovider.StatusProgressing(svcobj, conditionReasonError, err.Error())
 		return ctrl.Result{}, fmt.Errorf("failed to replicate chart pull secret: %w", err)
@@ -275,6 +280,27 @@ func (r *ODGReconciler) replicateChartPullSecret(ctx context.Context, secretName
 		return fmt.Errorf("failed to replicate chart pull secret %q to namespace %q: %w", secretName, target.Namespace, err)
 	}
 
+	return nil
+}
+
+// ensureTenantNamespace ensures the tenant namespace exists on the platform cluster.
+func (r *ODGReconciler) ensureTenantNamespace(ctx context.Context, tenantNamespace string) error {
+	l := logf.FromContext(ctx)
+	tenantNs := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: tenantNamespace,
+		},
+	}
+	if err := r.PlatformCluster.Client().Get(ctx, client.ObjectKey{Name: tenantNamespace}, tenantNs); err != nil {
+		if apierrors.IsNotFound(err) {
+			if err := r.PlatformCluster.Client().Create(ctx, tenantNs); err != nil {
+				return fmt.Errorf("failed to create tenant namespace %q: %w", tenantNamespace, err)
+			}
+			l.Info("Created tenant namespace on platform cluster", "namespace", tenantNamespace)
+		} else {
+			return fmt.Errorf("failed to check tenant namespace %q: %w", tenantNamespace, err)
+		}
+	}
 	return nil
 }
 
