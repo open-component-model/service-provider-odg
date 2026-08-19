@@ -11,6 +11,7 @@ import (
 
 	helmv2 "github.com/fluxcd/helm-controller/api/v2"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
+	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/e2e-framework/pkg/env"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
@@ -50,7 +51,7 @@ func TestMain(m *testing.M) {
 	}
 	testenv = env.NewWithConfig(envconf.New().WithNamespace(openmcp.Namespace))
 	openmcp.Bootstrap(testenv)
-	testenv.Setup(installFlux, registerFluxSchemes, installGatewayAPI)
+	testenv.Setup(installFlux, registerFluxSchemes, registerAccessRequestScheme, installGatewayAPI)
 	os.Exit(testenv.Run(m))
 }
 
@@ -74,6 +75,14 @@ func registerFluxSchemes(ctx context.Context, cfg *envconf.Config) (context.Cont
 	}
 	if err := sourcev1.AddToScheme(scheme); err != nil {
 		return ctx, fmt.Errorf("failed to register source-controller scheme: %w", err)
+	}
+	return ctx, nil
+}
+
+func registerAccessRequestScheme(ctx context.Context, cfg *envconf.Config) (context.Context, error) {
+	scheme := cfg.Client().Resources().GetScheme()
+	if err := clustersv1alpha1.AddToScheme(scheme); err != nil {
+		return ctx, fmt.Errorf("failed to register clusters scheme: %w", err)
 	}
 	return ctx, nil
 }
