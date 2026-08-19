@@ -73,7 +73,7 @@ func TestServiceProvider(t *testing.T) {
 					},
 				}
 
-				// Wait for OCIRepository to become Ready (3 minutes for chart pull)
+				// Wait for OCIRepository to become Ready (5 minutes for chart pull from private registry)
 				if err := wait.For(
 					func(ctx context.Context) (bool, error) {
 						if err := c.Client().Resources().Get(ctx, "odg-dashboard", tenantNamespace, ociRepo); err != nil {
@@ -81,7 +81,7 @@ func TestServiceProvider(t *testing.T) {
 						}
 						return apimeta.IsStatusConditionTrue(ociRepo.Status.Conditions, "Ready"), nil
 					},
-					wait.WithTimeout(3*time.Minute),
+					wait.WithTimeout(5*time.Minute),
 					wait.WithInterval(10*time.Second),
 				); err != nil {
 					t.Errorf("OCIRepository did not become ready: %v", err)
