@@ -50,7 +50,7 @@ func TestMain(m *testing.M) {
 	}
 	testenv = env.NewWithConfig(envconf.New().WithNamespace(openmcp.Namespace))
 	openmcp.Bootstrap(testenv)
-	testenv.Setup(installFlux, registerFluxSchemes)
+	testenv.Setup(installFlux, registerFluxSchemes, installGatewayAPI)
 	os.Exit(testenv.Run(m))
 }
 
@@ -75,6 +75,21 @@ func registerFluxSchemes(ctx context.Context, cfg *envconf.Config) (context.Cont
 	if err := sourcev1.AddToScheme(scheme); err != nil {
 		return ctx, fmt.Errorf("failed to register source-controller scheme: %w", err)
 	}
+	return ctx, nil
+}
+
+func installGatewayAPI(ctx context.Context, cfg *envconf.Config) (context.Context, error) {
+	// Install Gateway API CRDs (required by delivery-dashboard chart)
+	// Using the experimental channel which includes HTTPRoute and other Gateway API resources
+	args := []string{"apply", "-f", "https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.0/experimental-install.yaml"}
+	if kubeconfig := cfg.KubeconfigFile(); kubeconfig != "" {
+		args = append(args, "--kubeconfig", kubeconfig)
+	}
+	out, err := exec.Command("kubectl", args...).CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("gateway API installation failed: %w: %s", err, string(out))
+	}
+	klog.Infof("gateway API installation output: %s", string(out))
 	return ctx, nil
 }
 
