@@ -15,6 +15,24 @@ includes:
     flatten: true
 
 tasks:
+  install-flux:
+    desc: "Install Flux CLI for e2e tests"
+    vars:
+      FLUX_VERSION: v2.5.0
+      FLUX_BINARY: '{{.ROOT_DIR}}/bin/flux'
+    status:
+      - test -x "{{.FLUX_BINARY}}"
+      - '{{.FLUX_BINARY}} --version | grep -q "{{.FLUX_VERSION | trimPrefix "v"}}"'
+    cmds:
+      - mkdir -p {{.ROOT_DIR}}/bin
+      - |
+        TMPDIR=$(mktemp -d)
+        curl -sfL "https://github.com/fluxcd/flux2/releases/download/{{.FLUX_VERSION}}/flux_{{.FLUX_VERSION | trimPrefix "v"}}_{{OS}}_{{ARCH}}.tar.gz" -o "$TMPDIR/flux.tar.gz"
+        tar -xzf "$TMPDIR/flux.tar.gz" -C "$TMPDIR"
+        mv "$TMPDIR/flux" "{{.FLUX_BINARY}}"
+        chmod +x "{{.FLUX_BINARY}}"
+        rm -rf "$TMPDIR"
+
   build:img:build-test:
     desc: "Build image for current platform and tag without suffix for testing"
     cmds:
@@ -28,6 +46,8 @@ tasks:
 
   test-e2e:
     desc: "Build image and run e2e tests"
+    deps:
+      - install-flux
     cmds:
       - task: build:img:build-test
       - go test -v ./test/e2e/... -count=1

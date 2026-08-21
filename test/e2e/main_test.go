@@ -56,11 +56,17 @@ func TestMain(m *testing.M) {
 }
 
 func installFlux(ctx context.Context, cfg *envconf.Config) (context.Context, error) {
+	// Use flux binary from bin directory if available, otherwise fall back to PATH
+	fluxBinary := "../../bin/flux"
+	if _, err := os.Stat(fluxBinary); os.IsNotExist(err) {
+		fluxBinary = "flux" // Fall back to PATH
+	}
+
 	args := []string{"install"}
 	if kubeconfig := cfg.KubeconfigFile(); kubeconfig != "" {
 		args = append(args, "--kubeconfig", kubeconfig)
 	}
-	out, err := exec.Command("flux", args...).CombinedOutput()
+	out, err := exec.Command(fluxBinary, args...).CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("flux install failed: %w: %s", err, string(out))
 	}
