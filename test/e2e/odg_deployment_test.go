@@ -80,7 +80,7 @@ func TestServiceProviderDeployment(t *testing.T) {
 						}
 						return apimeta.IsStatusConditionTrue(ociRepo.Status.Conditions, "Ready"), nil
 					},
-					wait.WithTimeout(7*time.Minute),
+					wait.WithTimeout(3*time.Minute),
 					wait.WithInterval(10*time.Second),
 				); err != nil {
 					t.Errorf("OCIRepository did not become Ready: %v", err)
@@ -103,9 +103,18 @@ func TestServiceProviderDeployment(t *testing.T) {
 						if err := c.Client().Resources().Get(ctx, "odg", tenantNamespace, helmRelease); err != nil {
 							return false, nil
 						}
-						return apimeta.IsStatusConditionTrue(helmRelease.Status.Conditions, "Ready"), nil
+						ready := apimeta.IsStatusConditionTrue(helmRelease.Status.Conditions, "Ready")
+						if !ready {
+							// Log current status for debugging
+							for _, cond := range helmRelease.Status.Conditions {
+								if cond.Type == "Ready" {
+									t.Logf("HelmRelease Ready condition: %s - %s", cond.Status, cond.Message)
+								}
+							}
+						}
+						return ready, nil
 					},
-					wait.WithTimeout(7*time.Minute),
+					wait.WithTimeout(8*time.Minute),
 					wait.WithInterval(15*time.Second),
 				); err != nil {
 					t.Errorf("HelmRelease did not become Ready: %v", err)
