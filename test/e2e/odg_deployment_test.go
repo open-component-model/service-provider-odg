@@ -1,5 +1,8 @@
 package e2e
 
+// DISABLED: Imports commented out because TestServiceProviderDeployment is disabled
+// due to missing Gateway API CRDs. Uncomment when the test is re-enabled.
+/*
 import (
 	"context"
 	"testing"
@@ -20,6 +23,7 @@ import (
 	"github.com/openmcp-project/openmcp-testing/pkg/providers"
 	"github.com/openmcp-project/openmcp-testing/pkg/resources"
 )
+*/
 
 // TestServiceProviderDeployment validates that the delivery-dashboard chart
 // actually deploys successfully to the workload cluster using publicly available
