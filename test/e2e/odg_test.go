@@ -2,11 +2,14 @@ package e2e
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"testing"
 	"time"
 
 	helmv2 "github.com/fluxcd/helm-controller/api/v2"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/e2e-framework/klient/wait"
@@ -18,12 +21,46 @@ import (
 	"github.com/openmcp-project/openmcp-testing/pkg/resources"
 )
 
+func createDummyPullSecret(ctx context.Context, c *envconf.Config, namespace, name string) error {
+	// Create a dummy docker config for testing
+	dockerConfig := map[string]interface{}{
+		"auths": map[string]interface{}{
+			"test.example.com": map[string]string{
+				"username": "test",
+				"password": "test",
+				"auth":     base64.StdEncoding.EncodeToString([]byte("test:test")),
+			},
+		},
+	}
+	dockerConfigJSON, err := json.Marshal(dockerConfig)
+	if err != nil {
+		return err
+	}
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Type: corev1.SecretTypeDockerConfigJson,
+		Data: map[string][]byte{
+			corev1.DockerConfigJsonKey: dockerConfigJSON,
+		},
+	}
+
+	return c.Client().Resources().Create(ctx, secret)
+}
+
 func TestServiceProvider(t *testing.T) {
 	var onboardingList unstructured.UnstructuredList
 	var tenantNamespace string
 
 	basicProviderTest := features.New("provider test").
 		Setup(func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+			// Create dummy pull secret for testing
+			if err := createDummyPullSecret(ctx, c, "openmcp-system", "privateregcred"); err != nil {
+				t.Errorf("failed to create dummy pull secret: %v", err)
+			}
 			if _, err := resources.CreateObjectsFromDir(ctx, c, "platform"); err != nil {
 				t.Errorf("failed to create platform cluster objects: %v", err)
 			}
