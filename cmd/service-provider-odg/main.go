@@ -83,27 +83,28 @@ func init() {
 }
 
 func initPlatformScheme() {
-	utilruntime.Must(clientgoscheme.AddToScheme(platformScheme))
-	utilruntime.Must(apiextensionv1.AddToScheme(platformScheme))
-	utilruntime.Must(odgsv1alpha1.AddToScheme(platformScheme))
-	utilruntime.Must(clustersv1alpha1.AddToScheme(platformScheme))
-	utilruntime.Must(providerv1alpha1.AddToScheme(platformScheme))
-	utilruntime.Must(sourcev1.AddToScheme(platformScheme))
-	utilruntime.Must(helmv2.AddToScheme(platformScheme))
+	utilruntime.Must(clientgoscheme.AddToScheme(platformScheme))   // core k8s types
+	utilruntime.Must(apiextensionv1.AddToScheme(platformScheme))   // CRDs
+	utilruntime.Must(odgsv1alpha1.AddToScheme(platformScheme))     // ODG + ProviderConfig
+	utilruntime.Must(clustersv1alpha1.AddToScheme(platformScheme)) // AccessRequest, ClusterRequest, etc.
+	utilruntime.Must(providerv1alpha1.AddToScheme(platformScheme)) // ServiceProvider resource
+	utilruntime.Must(sourcev1.AddToScheme(platformScheme))         // Flux OCIRepository
+	utilruntime.Must(helmv2.AddToScheme(platformScheme))           // Flux HelmRelease
 }
 
 func initOnboardingScheme() {
-	utilruntime.Must(clientgoscheme.AddToScheme(onboardingScheme))
-	utilruntime.Must(apiextensionv1.AddToScheme(onboardingScheme))
-	utilruntime.Must(odgsv1alpha1.AddToScheme(onboardingScheme))
+	utilruntime.Must(clientgoscheme.AddToScheme(onboardingScheme)) // core k8s types
+	utilruntime.Must(apiextensionv1.AddToScheme(onboardingScheme)) // CRDs
+	utilruntime.Must(odgsv1alpha1.AddToScheme(onboardingScheme))   // ODG + ProviderConfig
 }
 
 func initMcpScheme() {
-	utilruntime.Must(clientgoscheme.AddToScheme(mcpScheme))
-	utilruntime.Must(apiextensionv1.AddToScheme(mcpScheme))
+	utilruntime.Must(clientgoscheme.AddToScheme(mcpScheme)) // core k8s types
+	utilruntime.Must(apiextensionv1.AddToScheme(mcpScheme)) // CRDs
 }
+
 func initWorkloadScheme() {
-	utilruntime.Must(clientgoscheme.AddToScheme(workloadScheme))
+	utilruntime.Must(clientgoscheme.AddToScheme(workloadScheme)) // core k8s types
 }
 
 const (
