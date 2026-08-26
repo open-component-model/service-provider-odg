@@ -170,7 +170,7 @@ func (r *ODGReconciler) reconcileChart(ctx context.Context, svcobj *apiv1alpha1.
 }
 
 // Delete is called on every delete event
-func (r *ODGReconciler) Delete(ctx context.Context, obj *apiv1alpha1.ODG, providerConfig *apiv1alpha1.ProviderConfig, _ clusteraccess.ClusterContext) (ctrl.Result, error) {
+func (r *ODGReconciler) Delete(ctx context.Context, obj *apiv1alpha1.ODG, providerConfig *apiv1alpha1.ProviderConfig, clusters clusteraccess.ClusterContext) (ctrl.Result, error) {
 	serviceprovider.StatusTerminating(obj)
 
 	tenantNamespace, err := libutils.StableMCPNamespace(obj.Name, obj.Namespace)
@@ -198,6 +198,18 @@ func (r *ODGReconciler) Delete(ctx context.Context, obj *apiv1alpha1.ODG, provid
 			return ctrl.Result{}, fmt.Errorf("delete object failed: %w", err)
 		}
 		if err := r.PlatformCluster.Client().Get(ctx, client.ObjectKeyFromObject(managedObj), managedObj); !apierrors.IsNotFound(err) {
+			objectsStillExist = true
+		}
+	}
+
+	if clusters.WorkloadCluster != nil {
+		odgNamespace := StableODGNamespace(obj.Namespace, obj.Name)
+		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: odgNamespace}}
+		if err := clusters.WorkloadCluster.Client().Delete(ctx, ns); client.IgnoreNotFound(err) != nil {
+			serviceprovider.StatusTerminatingWithReason(obj, conditionReasonError, err.Error())
+			return ctrl.Result{}, fmt.Errorf("failed to delete odg namespace %q: %w", odgNamespace, err)
+		}
+		if err := clusters.WorkloadCluster.Client().Get(ctx, client.ObjectKey{Name: odgNamespace}, ns); !apierrors.IsNotFound(err) {
 			objectsStillExist = true
 		}
 	}
@@ -341,6 +353,15 @@ func (r *ODGReconciler) replicateWorkloadImagePullSecrets(ctx context.Context, w
 
 	if err := platformClient.Get(ctx, sourceKey, sourceSecret); err != nil {
 		return fmt.Errorf("failed to get chart pull secret %q from namespace %q: %w", secretName, r.PodNamespace, err)
+	}
+
+	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: odgNamespace}}
+	if err := workloadClient.Get(ctx, client.ObjectKey{Name: odgNamespace}, ns); apierrors.IsNotFound(err) {
+		if err := workloadClient.Create(ctx, ns); err != nil {
+			return fmt.Errorf("failed to create namespace %q on workload cluster: %w", odgNamespace, err)
+		}
+	} else if err != nil {
+		return fmt.Errorf("failed to check namespace %q on workload cluster: %w", odgNamespace, err)
 	}
 
 	targetSecret := &corev1.Secret{
