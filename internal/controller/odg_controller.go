@@ -62,17 +62,15 @@ const (
 	// conditionReasonError is the Ready condition reason used when a reconcile step fails.
 	conditionReasonError = "ReconcileError"
 
-	// OCIRepositoryName todo: one repo name per chart
-	OCIRepositoryName = "odg-dashboard"
-
 	// OdgSystemNamespace todo: might require multi-tenancy
 	OdgSystemNamespace = "odg-system"
 
-	// HelmReleaseName is the release name of the helm installation
-	HelmReleaseName = "odg"
-
-	// requestSuffixWorkload is the suffix used for the workload cluster.
+	// requestSuffixWorkload is the suffix used for the access request of the workload cluster.
 	requestSuffixWorkload = "--wl"
+
+	// ociRepositoryKind and helmReleaseKind are used for status resource entries.
+	ociRepositoryKind = "OCIRepository"
+	helmReleaseKind   = "HelmRelease"
 )
 
 // CreateOrUpdate is called on every add or update event
@@ -80,7 +78,6 @@ func (r *ODGReconciler) CreateOrUpdate(ctx context.Context, svcobj *apiv1alpha1.
 	l := logf.FromContext(ctx)
 	serviceprovider.StatusProgressing(svcobj, "Reconciling", "Reconcile in progress")
 
-	version := providerConfig.Spec.Versions[0]
 	tenantNamespace, err := libutils.StableMCPNamespace(svcobj.Name, svcobj.Namespace)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to determine stable namespace for ODG instance: %w", err)
@@ -91,40 +88,63 @@ func (r *ODGReconciler) CreateOrUpdate(ctx context.Context, svcobj *apiv1alpha1.
 		return ctrl.Result{}, err
 	}
 
-	if err := r.replicateChartPullSecret(ctx, version.ChartPullSecretName, types.NamespacedName{Name: version.ChartPullSecretName, Namespace: tenantNamespace}); err != nil {
-		serviceprovider.StatusProgressing(svcobj, conditionReasonError, err.Error())
-		return ctrl.Result{}, fmt.Errorf("failed to replicate chart pull secret: %w", err)
+	allReady := true
+	var resources []apiv1alpha1.ManagedResource
+
+	for _, chart := range providerConfig.Spec.Charts {
+		chartResources, err := r.reconcileChart(ctx, svcobj, chart, tenantNamespace, clusters)
+		if err != nil {
+			serviceprovider.StatusProgressing(svcobj, conditionReasonError, err.Error())
+			return ctrl.Result{}, err
+		}
+		for _, res := range chartResources {
+			if res.Phase != apiv1alpha1.Ready {
+				allReady = false
+			}
+		}
+		resources = append(resources, chartResources...)
 	}
 
-	chartURL := apiv1alpha1.EnsureOCIScheme(*version.ChartURL)
+	l.Info("Done reconciling ODG resource", "odgName", svcobj.Name)
 
-	ociRepo, err := r.createOrUpdateOCIRepository(ctx, chartURL, version.ChartVersion, version.ChartPullSecretName, tenantNamespace)
+	svcobj.Status.Resources = resources
+
+	if allReady {
+		serviceprovider.StatusReady(svcobj)
+	} else {
+		serviceprovider.StatusProgressing(svcobj, "Reconciling", "Waiting for managed resources to become ready")
+	}
+	return ctrl.Result{}, nil
+}
+
+func (r *ODGReconciler) reconcileChart(ctx context.Context, svcobj *apiv1alpha1.ODG, chart apiv1alpha1.ODGChart, tenantNamespace string, clusters clusteraccess.ClusterContext) ([]apiv1alpha1.ManagedResource, error) {
+	if err := r.replicateChartPullSecret(ctx, chart.ChartPullSecretName, types.NamespacedName{Name: chart.ChartPullSecretName, Namespace: tenantNamespace}); err != nil {
+		return nil, fmt.Errorf("failed to replicate chart pull secret: %w", err)
+	}
+
+	ociRepo, err := r.createOrUpdateOCIRepository(ctx, chart.ChartName, apiv1alpha1.EnsureOCIScheme(*chart.ChartURL), chart.ChartVersion, chart.ChartPullSecretName, tenantNamespace)
 	if err != nil {
-		serviceprovider.StatusProgressing(svcobj, conditionReasonError, err.Error())
-		return ctrl.Result{}, fmt.Errorf("failed to reconcile OCI Repository: %w", err)
+		return nil, fmt.Errorf("failed to reconcile OCI Repository: %w", err)
 	}
 
-	if err := r.replicateWorkloadImagePullSecrets(ctx, clusters.WorkloadCluster, version.ChartPullSecretName); err != nil {
-		serviceprovider.StatusProgressing(svcobj, conditionReasonError, err.Error())
-		return ctrl.Result{}, fmt.Errorf("failed to replicate workload cluster image pull secrets: %w", err)
+	if err := r.replicateWorkloadImagePullSecrets(ctx, clusters.WorkloadCluster, chart.ChartPullSecretName); err != nil {
+		return nil, fmt.Errorf("failed to replicate workload cluster image pull secrets: %w", err)
 	}
 
-	helmRel, err := r.createOrUpdateHelmRelease(ctx, tenantNamespace, svcobj, version.HelmValues)
+	helmRel, err := r.createOrUpdateHelmRelease(ctx, chart.ChartName, tenantNamespace, svcobj, chart.HelmValues)
 	if err != nil {
-		serviceprovider.StatusProgressing(svcobj, conditionReasonError, err.Error())
-		return ctrl.Result{}, fmt.Errorf("failed to reconcile HelmRelease: %w", err)
+		return nil, fmt.Errorf("failed to reconcile HelmRelease: %w", err)
 	}
-
-	l.Info("Done reconciling ODG resource", "name", svcobj.Name)
 
 	ociPhase, ociMsg := resourceStatus(ociRepo.Status.Conditions)
 	hrPhase, hrMsg := resourceStatus(helmRel.Status.Conditions)
-	svcobj.Status.Resources = []apiv1alpha1.ManagedResource{
+
+	return []apiv1alpha1.ManagedResource{
 		{
 			TypedObjectReference: corev1.TypedObjectReference{
 				APIGroup:  stringPtr(sourcev1.GroupVersion.Group),
-				Kind:      "OCIRepository",
-				Name:      OCIRepositoryName,
+				Kind:      ociRepositoryKind,
+				Name:      chart.ChartName,
 				Namespace: &tenantNamespace,
 			},
 			Phase:    ociPhase,
@@ -134,41 +154,37 @@ func (r *ODGReconciler) CreateOrUpdate(ctx context.Context, svcobj *apiv1alpha1.
 		{
 			TypedObjectReference: corev1.TypedObjectReference{
 				APIGroup:  stringPtr(helmv2.GroupVersion.Group),
-				Kind:      "HelmRelease",
-				Name:      HelmReleaseName,
+				Kind:      helmReleaseKind,
+				Name:      chart.ChartName,
 				Namespace: &tenantNamespace,
 			},
 			Phase:    hrPhase,
 			Message:  hrMsg,
 			Location: apiv1alpha1.PlatformCluster,
 		},
-	}
-
-	if ociPhase == apiv1alpha1.Ready && hrPhase == apiv1alpha1.Ready {
-		serviceprovider.StatusReady(svcobj)
-	} else {
-		serviceprovider.StatusProgressing(svcobj, "Reconciling", "Waiting for managed resources to become ready")
-	}
-	return ctrl.Result{}, nil
+	}, nil
 }
 
 // Delete is called on every delete event
-func (r *ODGReconciler) Delete(ctx context.Context, obj *apiv1alpha1.ODG, _ *apiv1alpha1.ProviderConfig, _ clusteraccess.ClusterContext) (ctrl.Result, error) {
+func (r *ODGReconciler) Delete(ctx context.Context, obj *apiv1alpha1.ODG, providerConfig *apiv1alpha1.ProviderConfig, _ clusteraccess.ClusterContext) (ctrl.Result, error) {
 	serviceprovider.StatusTerminating(obj)
 
 	tenantNamespace, err := libutils.StableMCPNamespace(obj.Name, obj.Namespace)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to determine stable namespace for ODG instance: %w", err)
 	}
-	obj.Status.Resources = managedResources(tenantNamespace, apiv1alpha1.Terminating)
+	obj.Status.Resources = managedResources(tenantNamespace, providerConfig.Spec.Charts, apiv1alpha1.Terminating)
 
-	objects := []client.Object{
-		&sourcev1.OCIRepository{
-			ObjectMeta: metav1.ObjectMeta{Name: OCIRepositoryName, Namespace: tenantNamespace},
-		},
-		&helmv2.HelmRelease{
-			ObjectMeta: metav1.ObjectMeta{Name: HelmReleaseName, Namespace: tenantNamespace},
-		},
+	var objects []client.Object
+	for _, chart := range providerConfig.Spec.Charts {
+		objects = append(objects,
+			&sourcev1.OCIRepository{
+				ObjectMeta: metav1.ObjectMeta{Name: chart.ChartName, Namespace: tenantNamespace},
+			},
+			&helmv2.HelmRelease{
+				ObjectMeta: metav1.ObjectMeta{Name: chart.ChartName, Namespace: tenantNamespace},
+			},
+		)
 	}
 
 	objectsStillExist := false
@@ -210,7 +226,7 @@ func (r *ODGReconciler) IsReferencedSecret(ctx context.Context, secret *corev1.S
 	return false
 }
 
-func createOciRepository(chartURL, secretName, chartVersion, namespace string) *sourcev1.OCIRepository {
+func createOciRepository(name, chartURL, secretName, chartVersion, namespace string) *sourcev1.OCIRepository {
 	var secretRef *meta.LocalObjectReference
 	if secretName != "" {
 		secretRef = &meta.LocalObjectReference{Name: secretName}
@@ -218,7 +234,7 @@ func createOciRepository(chartURL, secretName, chartVersion, namespace string) *
 
 	return &sourcev1.OCIRepository{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      OCIRepositoryName,
+			Name:      name,
 			Namespace: namespace,
 		},
 		Spec: sourcev1.OCIRepositorySpec{
@@ -232,8 +248,8 @@ func createOciRepository(chartURL, secretName, chartVersion, namespace string) *
 	}
 }
 
-func (r *ODGReconciler) createOrUpdateOCIRepository(ctx context.Context, chartURL, chartVersion, secretName, namespace string) (*sourcev1.OCIRepository, error) {
-	ociRepository := createOciRepository(chartURL, secretName, chartVersion, namespace)
+func (r *ODGReconciler) createOrUpdateOCIRepository(ctx context.Context, name, chartURL, chartVersion, secretName, namespace string) (*sourcev1.OCIRepository, error) {
+	ociRepository := createOciRepository(name, chartURL, secretName, chartVersion, namespace)
 	managedObj := &sourcev1.OCIRepository{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ociRepository.Name,
@@ -341,8 +357,8 @@ func (r *ODGReconciler) replicateWorkloadImagePullSecrets(ctx context.Context, w
 	return nil
 }
 
-func (r *ODGReconciler) createOrUpdateHelmRelease(ctx context.Context, namespace string, svcobj *apiv1alpha1.ODG, values *apiextensionsv1.JSON) (*helmv2.HelmRelease, error) {
-	helmRelease, err := r.createHelmRelease(ctx, namespace, svcobj, values)
+func (r *ODGReconciler) createOrUpdateHelmRelease(ctx context.Context, name, namespace string, svcobj *apiv1alpha1.ODG, values *apiextensionsv1.JSON) (*helmv2.HelmRelease, error) {
+	helmRelease, err := r.createHelmRelease(ctx, name, namespace, svcobj, values)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create helm release: %w", err)
 	}
@@ -364,7 +380,7 @@ func (r *ODGReconciler) createOrUpdateHelmRelease(ctx context.Context, namespace
 	return managedObj, nil
 }
 
-func (r *ODGReconciler) createHelmRelease(ctx context.Context, namespace string, svcobj *apiv1alpha1.ODG, helmValues *apiextensionsv1.JSON) (*helmv2.HelmRelease, error) {
+func (r *ODGReconciler) createHelmRelease(ctx context.Context, name, namespace string, svcobj *apiv1alpha1.ODG, helmValues *apiextensionsv1.JSON) (*helmv2.HelmRelease, error) {
 	fluxConfigRef, err := r.getWorkloadFluxConfig(ctx, namespace, svcobj.Name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get FluxConfig: %w", err)
@@ -372,11 +388,11 @@ func (r *ODGReconciler) createHelmRelease(ctx context.Context, namespace string,
 
 	return &helmv2.HelmRelease{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      HelmReleaseName,
+			Name:      name,
 			Namespace: namespace,
 		},
 		Spec: helmv2.HelmReleaseSpec{
-			ReleaseName:      apiv1alpha1.DefaultReleaseName,
+			ReleaseName:      name,
 			Interval:         metav1.Duration{Duration: time.Minute},
 			TargetNamespace:  OdgSystemNamespace,
 			StorageNamespace: OdgSystemNamespace,
@@ -396,8 +412,8 @@ func (r *ODGReconciler) createHelmRelease(ctx context.Context, namespace string,
 				},
 			},
 			ChartRef: &helmv2.CrossNamespaceSourceReference{
-				Kind:      "OCIRepository",
-				Name:      OCIRepositoryName,
+				Kind:      ociRepositoryKind,
+				Name:      name,
 				Namespace: namespace,
 			},
 			Values: helmValues,
@@ -453,28 +469,32 @@ func remediationStrategyPointer(s helmv2.RemediationStrategy) *helmv2.Remediatio
 }
 
 // managedResources returns the set of platform-cluster objects this controller
-// owns for an OCM instance, tagged with the given lifecycle phase.
-func managedResources(tenantNamespace string, phase apiv1alpha1.InstancePhase) []apiv1alpha1.ManagedResource {
-	return []apiv1alpha1.ManagedResource{
-		{
-			TypedObjectReference: corev1.TypedObjectReference{
-				APIGroup:  stringPtr(sourcev1.GroupVersion.Group),
-				Kind:      "OCIRepository",
-				Name:      OCIRepositoryName,
-				Namespace: stringPtr(tenantNamespace),
+// owns for an ODG instance, tagged with the given lifecycle phase.
+func managedResources(tenantNamespace string, charts []apiv1alpha1.ODGChart, phase apiv1alpha1.InstancePhase) []apiv1alpha1.ManagedResource {
+	resources := make([]apiv1alpha1.ManagedResource, 0, len(charts)*2)
+	for _, chart := range charts {
+		resources = append(resources,
+			apiv1alpha1.ManagedResource{
+				TypedObjectReference: corev1.TypedObjectReference{
+					APIGroup:  stringPtr(sourcev1.GroupVersion.Group),
+					Kind:      ociRepositoryKind,
+					Name:      chart.ChartName,
+					Namespace: stringPtr(tenantNamespace),
+				},
+				Phase:    phase,
+				Location: apiv1alpha1.PlatformCluster,
 			},
-			Phase:    phase,
-			Location: apiv1alpha1.PlatformCluster,
-		},
-		{
-			TypedObjectReference: corev1.TypedObjectReference{
-				APIGroup:  stringPtr(helmv2.GroupVersion.Group),
-				Kind:      "HelmRelease",
-				Name:      HelmReleaseName,
-				Namespace: stringPtr(tenantNamespace),
+			apiv1alpha1.ManagedResource{
+				TypedObjectReference: corev1.TypedObjectReference{
+					APIGroup:  stringPtr(helmv2.GroupVersion.Group),
+					Kind:      helmReleaseKind,
+					Name:      chart.ChartName,
+					Namespace: stringPtr(tenantNamespace),
+				},
+				Phase:    phase,
+				Location: apiv1alpha1.PlatformCluster,
 			},
-			Phase:    phase,
-			Location: apiv1alpha1.PlatformCluster,
-		},
+		)
 	}
+	return resources
 }

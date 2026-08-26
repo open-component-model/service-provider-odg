@@ -41,17 +41,15 @@ spec:
           spec:
             description: spec defines the desired state of ProviderConfig
             properties:
-              pollInterval:
-                default: 1m
-                description: foo is an example field of ProviderConfig. Edit providerconfig_types.go
-                  to remove/update
-                format: duration
-                type: string
-              versions:
+              charts:
+                description: Charts defines a list of ODG Helm charts that can be
+                  installed.
                 items:
-                  description: ODGVersion defines a version of the ODG that can be
-                    installed.
+                  description: ODGChart defines a Helm chart of ODG that can be installed.
                   properties:
+                    chartName:
+                      description: ChartName is a unique name of the Helm chart.
+                      type: string
                     chartPullSecretName:
                       description: |-
                         ChartPullSecretName is the name of a secret in the controller's namespace holding the
@@ -60,7 +58,6 @@ spec:
                         The secret must be of type kubernetes.io/dockerconfigjson.
                       type: string
                     chartURL:
-                      default: oci://europe-docker.pkg.dev/gardener-project/releases/charts/odg/delivery-dashboard
                       description: |-
                         ChartURL is a reference to an OCI repository that hosts the ODG Helm chart.
                         An "oci://" prefix is added automatically when missing.
@@ -69,17 +66,23 @@ spec:
                       description: ChartVersion is the tag of the Helm chart to install.
                       type: string
                     helmValues:
-                      description: |-
-                        HelmValues are arbitrary Helm values passed directly to the managed HelmRelease.
-                        Secrets referenced under `manager.imagePullSecrets` are replicated from the
-                        controller's namespace into the ODG namespace on the control plane.
+                      description: HelmValues are arbitrary Helm values passed directly
+                        to the managed HelmRelease.
                       x-kubernetes-preserve-unknown-fields: true
                   required:
+                  - chartName
+                  - chartURL
                   - chartVersion
                   type: object
                 type: array
+              pollInterval:
+                default: 1m
+                description: PollInterval at which the controller requeues to detect
+                  drift.
+                format: duration
+                type: string
             required:
-            - versions
+            - charts
             type: object
           status:
             description: status defines the observed state of ProviderConfig
