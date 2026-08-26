@@ -415,6 +415,7 @@ func main() {
 		PlatformCluster(platformCluster).
 		OnboardingCluster(onboardingCluster).
 		SecretNamespace(podNamespace).
+		WorkloadCluster(true).
 		Reconciler(&controller.ODGReconciler{
 			OnboardingCluster: onboardingCluster,
 			PlatformCluster:   platformCluster,
