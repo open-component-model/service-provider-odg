@@ -3,12 +3,18 @@ kind: ProviderConfig
 metadata:
   name: odg
 spec:
-  pollInterval: 1m
-  versions:
-    - chartVersion: "0.439.0"
-      chartURL: oci://europe-docker.pkg.dev/gardener-project/releases/charts/odg/delivery-dashboard
+  charts:
+    - chartName: bootstrapping
       chartPullSecretName: privateregcred
-      helmValues:
-        manager:
-          imagePullSecrets:
-            - name: privateregcred
+      chartURL: europe.docker.pkg-dev/gardener-project/releases/charts/odg/bootstrapping
+      chartVersion: 0.1369.0
+      helmValues: {}
+    - chartName: delivery-dashboard
+      chartPullSecretName: privateregcred
+      chartURL: oci://europe-docker.pkg.dev/gardener-project/releases/charts/odg/delivery-dashboard
+      chartVersion: 0.440.0
+    - chartName: delivery-service
+      chartPullSecretName: privateregcred
+      chartURL: europe-docker.pkg.dev/gardener-project/releases/charts/odg/delivery-service
+      chartVersion: 0.1369.0
+  pollInterval: 1m
