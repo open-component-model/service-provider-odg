@@ -17,6 +17,7 @@ limitations under the License.
 package controller
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"time"
@@ -37,6 +38,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/openmcp-project/controller-utils/pkg/clusters"
+	"github.com/openmcp-project/controller-utils/pkg/controller"
 	clusteraccess "github.com/openmcp-project/opencontrolplane-runtime/pkg/serviceprovider/clusteraccess"
 	"github.com/openmcp-project/openmcp-operator/lib/clusteraccess/advanced"
 
@@ -62,8 +64,8 @@ const (
 	// conditionReasonError is the Ready condition reason used when a reconcile step fails.
 	conditionReasonError = "ReconcileError"
 
-	// OdgSystemNamespace todo: might require multi-tenancy
-	OdgSystemNamespace = "odg-system"
+	// OdgSystemNamespacePrefix is the namespace prefix on the target cluster to deploy ODG components into.
+	OdgSystemNamespacePrefix = "odg-system-"
 
 	// requestSuffixWorkload is the suffix used for the access request of the workload cluster.
 	requestSuffixWorkload = "--wl"
@@ -118,6 +120,8 @@ func (r *ODGReconciler) CreateOrUpdate(ctx context.Context, svcobj *apiv1alpha1.
 }
 
 func (r *ODGReconciler) reconcileChart(ctx context.Context, svcobj *apiv1alpha1.ODG, chart apiv1alpha1.ODGChart, tenantNamespace string, clusters clusteraccess.ClusterContext) ([]apiv1alpha1.ManagedResource, error) {
+	odgNamespace := StableODGNamespace(svcobj.Namespace, svcobj.Name)
+
 	if err := r.replicateChartPullSecret(ctx, chart.ChartPullSecretName, types.NamespacedName{Name: chart.ChartPullSecretName, Namespace: tenantNamespace}); err != nil {
 		return nil, fmt.Errorf("failed to replicate chart pull secret: %w", err)
 	}
@@ -127,11 +131,11 @@ func (r *ODGReconciler) reconcileChart(ctx context.Context, svcobj *apiv1alpha1.
 		return nil, fmt.Errorf("failed to reconcile OCI Repository: %w", err)
 	}
 
-	if err := r.replicateWorkloadImagePullSecrets(ctx, clusters.WorkloadCluster, chart.ChartPullSecretName); err != nil {
+	if err := r.replicateWorkloadImagePullSecrets(ctx, clusters.WorkloadCluster, chart.ChartPullSecretName, odgNamespace); err != nil {
 		return nil, fmt.Errorf("failed to replicate workload cluster image pull secrets: %w", err)
 	}
 
-	helmRel, err := r.createOrUpdateHelmRelease(ctx, chart.ChartName, tenantNamespace, svcobj, chart.HelmValues)
+	helmRel, err := r.createOrUpdateHelmRelease(ctx, chart.ChartName, tenantNamespace, odgNamespace, svcobj, chart.HelmValues)
 	if err != nil {
 		return nil, fmt.Errorf("failed to reconcile HelmRelease: %w", err)
 	}
@@ -320,7 +324,7 @@ func (r *ODGReconciler) ensureTenantNamespace(ctx context.Context, tenantNamespa
 	return nil
 }
 
-func (r *ODGReconciler) replicateWorkloadImagePullSecrets(ctx context.Context, workloadCluster *clusters.Cluster, secretName string) error {
+func (r *ODGReconciler) replicateWorkloadImagePullSecrets(ctx context.Context, workloadCluster *clusters.Cluster, secretName, odgNamespace string) error {
 	if secretName == "" {
 		return nil
 	}
@@ -342,7 +346,7 @@ func (r *ODGReconciler) replicateWorkloadImagePullSecrets(ctx context.Context, w
 	targetSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      secretName,
-			Namespace: OdgSystemNamespace,
+			Namespace: odgNamespace,
 		},
 	}
 
@@ -351,21 +355,21 @@ func (r *ODGReconciler) replicateWorkloadImagePullSecrets(ctx context.Context, w
 		targetSecret.Type = sourceSecret.Type
 		return nil
 	}); err != nil {
-		return fmt.Errorf("failed to replicate chart pull secret %q to namespace %q: %w", secretName, OdgSystemNamespace, err)
+		return fmt.Errorf("failed to replicate chart pull secret %q to namespace %q: %w", secretName, odgNamespace, err)
 	}
 
 	return nil
 }
 
-func (r *ODGReconciler) createOrUpdateHelmRelease(ctx context.Context, name, namespace string, svcobj *apiv1alpha1.ODG, values *apiextensionsv1.JSON) (*helmv2.HelmRelease, error) {
-	helmRelease, err := r.createHelmRelease(ctx, name, namespace, svcobj, values)
+func (r *ODGReconciler) createOrUpdateHelmRelease(ctx context.Context, name, tenantNamespace, odgNamespace string, svcobj *apiv1alpha1.ODG, values *apiextensionsv1.JSON) (*helmv2.HelmRelease, error) {
+	helmRelease, err := r.createHelmRelease(ctx, name, tenantNamespace, odgNamespace, svcobj, values)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create helm release: %w", err)
 	}
 	managedObj := &helmv2.HelmRelease{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      helmRelease.Name,
-			Namespace: namespace,
+			Namespace: tenantNamespace,
 		},
 	}
 	l := logf.FromContext(ctx)
@@ -380,8 +384,15 @@ func (r *ODGReconciler) createOrUpdateHelmRelease(ctx context.Context, name, nam
 	return managedObj, nil
 }
 
-func (r *ODGReconciler) createHelmRelease(ctx context.Context, name, namespace string, svcobj *apiv1alpha1.ODG, helmValues *apiextensionsv1.JSON) (*helmv2.HelmRelease, error) {
-	fluxConfigRef, err := r.getWorkloadFluxConfig(ctx, namespace, svcobj.Name)
+func (r *ODGReconciler) createHelmRelease(ctx context.Context, name, tenantNamespace, odgNamespace string, svcobj *apiv1alpha1.ODG, helmValues *apiextensionsv1.JSON) (*helmv2.HelmRelease, error) {
+	if helmValues != nil {
+		// TODO patch in the values more elaborately
+		helmValues = &apiextensionsv1.JSON{
+			Raw: bytes.ReplaceAll(helmValues.Raw, []byte("odg-system"), []byte(odgNamespace)),
+		}
+	}
+
+	fluxConfigRef, err := r.getWorkloadFluxConfig(ctx, tenantNamespace, svcobj.Name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get FluxConfig: %w", err)
 	}
@@ -389,13 +400,13 @@ func (r *ODGReconciler) createHelmRelease(ctx context.Context, name, namespace s
 	return &helmv2.HelmRelease{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
-			Namespace: namespace,
+			Namespace: tenantNamespace,
 		},
 		Spec: helmv2.HelmReleaseSpec{
 			ReleaseName:      name,
 			Interval:         metav1.Duration{Duration: time.Minute},
-			TargetNamespace:  OdgSystemNamespace,
-			StorageNamespace: OdgSystemNamespace,
+			TargetNamespace:  odgNamespace,
+			StorageNamespace: odgNamespace,
 			Install: &helmv2.Install{
 				CRDs:            helmv2.Create,
 				CreateNamespace: true,
@@ -414,7 +425,7 @@ func (r *ODGReconciler) createHelmRelease(ctx context.Context, name, namespace s
 			ChartRef: &helmv2.CrossNamespaceSourceReference{
 				Kind:      ociRepositoryKind,
 				Name:      name,
-				Namespace: namespace,
+				Namespace: tenantNamespace,
 			},
 			Values: helmValues,
 			KubeConfig: &meta.KubeConfigReference{
@@ -497,4 +508,12 @@ func managedResources(tenantNamespace string, charts []apiv1alpha1.ODGChart, pha
 		)
 	}
 	return resources
+}
+
+// StableODGNamespace computes the namespace on the workload cluster that belongs to the given ODG.
+// onboardingName and onboardingNamespace are name and namespace of the ODG resource on the onboarding cluster.
+func StableODGNamespace(onboardingNamespace, onboardingName string) string {
+	res := controller.NameHashSHAKE128Base32(onboardingNamespace, onboardingName)
+
+	return OdgSystemNamespacePrefix + res
 }

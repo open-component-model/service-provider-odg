@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -155,9 +156,9 @@ func TestServiceProvider(t *testing.T) {
 						t.Errorf("HelmRelease %q was not created: %v", chartName, err)
 						continue
 					}
-					if helmRelease.Spec.TargetNamespace != "odg-system" {
-						t.Errorf("HelmRelease %q targetNamespace mismatch: got %q, want %q",
-							chartName, helmRelease.Spec.TargetNamespace, "odg-system")
+					if !strings.HasPrefix(helmRelease.Spec.TargetNamespace, "odg-system-") {
+						t.Errorf("HelmRelease %q targetNamespace mismatch: got %q, want prefix %q",
+							chartName, helmRelease.Spec.TargetNamespace, "odg-system-")
 					}
 					if helmRelease.Spec.ChartRef == nil || helmRelease.Spec.ChartRef.Name != chartName {
 						t.Errorf("HelmRelease %q chartRef mismatch", chartName)
