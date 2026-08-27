@@ -73,6 +73,11 @@ const (
 	// ociRepositoryKind and helmReleaseKind are used for status resource entries.
 	ociRepositoryKind = "OCIRepository"
 	helmReleaseKind   = "HelmRelease"
+
+	// managedByLabel is set on all objects created by this controller to distinguish them from
+	// objects created by other service providers in the same tenant namespace.
+	managedByLabel      = "app.kubernetes.io/managed-by"
+	managedByLabelValue = "service-provider-odg"
 )
 
 // CreateOrUpdate is called on every add or update event
@@ -105,6 +110,11 @@ func (r *ODGReconciler) CreateOrUpdate(ctx context.Context, svcobj *apiv1alpha1.
 			}
 		}
 		resources = append(resources, chartResources...)
+	}
+
+	if err := r.deleteRemovedCharts(ctx, tenantNamespace, providerConfig.Spec.Charts); err != nil {
+		serviceprovider.StatusProgressing(svcobj, conditionReasonError, err.Error())
+		return ctrl.Result{}, err
 	}
 
 	l.Info("Done reconciling ODG resource", "odgName", svcobj.Name)
@@ -252,6 +262,7 @@ func createOciRepository(name, chartURL, secretName, chartVersion, namespace str
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
+			Labels:    map[string]string{managedByLabel: managedByLabelValue},
 		},
 		Spec: sourcev1.OCIRepositorySpec{
 			Interval:  metav1.Duration{Duration: time.Minute},
@@ -275,6 +286,7 @@ func (r *ODGReconciler) createOrUpdateOCIRepository(ctx context.Context, name, c
 	l := logf.FromContext(ctx)
 	l.Info("creating OCI Repository", "object", ociRepository)
 	if _, err := ctrl.CreateOrUpdate(ctx, r.PlatformCluster.Client(), managedObj, func() error {
+		managedObj.Labels = map[string]string{managedByLabel: managedByLabelValue}
 		managedObj.Spec = ociRepository.Spec
 		return nil
 	}); err != nil {
@@ -396,6 +408,7 @@ func (r *ODGReconciler) createOrUpdateHelmRelease(ctx context.Context, name, ten
 	l := logf.FromContext(ctx)
 	l.Info("creating Helm Release", "object", managedObj)
 	if _, err := ctrl.CreateOrUpdate(ctx, r.PlatformCluster.Client(), managedObj, func() error {
+		managedObj.Labels = map[string]string{managedByLabel: managedByLabelValue}
 		managedObj.Spec = helmRelease.Spec
 		return nil
 	}); err != nil {
@@ -422,6 +435,7 @@ func (r *ODGReconciler) createHelmRelease(ctx context.Context, name, tenantNames
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: tenantNamespace,
+			Labels:    map[string]string{managedByLabel: managedByLabelValue},
 		},
 		Spec: helmv2.HelmReleaseSpec{
 			ReleaseName:      name,
@@ -529,6 +543,47 @@ func managedResources(tenantNamespace string, charts []apiv1alpha1.ODGChart, pha
 		)
 	}
 	return resources
+}
+
+// deleteRemovedCharts deletes OCIRepository and HelmRelease objects in tenantNamespace
+// that are no longer referenced by any chart in the current provider config.
+func (r *ODGReconciler) deleteRemovedCharts(ctx context.Context, tenantNamespace string, charts []apiv1alpha1.ODGChart) error {
+	desired := make(map[string]bool, len(charts))
+	for _, ch := range charts {
+		desired[ch.ChartName] = true
+	}
+
+	ociList := &sourcev1.OCIRepositoryList{}
+	if err := r.PlatformCluster.Client().List(ctx, ociList,
+		client.InNamespace(tenantNamespace),
+		client.MatchingLabels{managedByLabel: managedByLabelValue},
+	); err != nil {
+		return fmt.Errorf("failed to list OCIRepositories: %w", err)
+	}
+	for i := range ociList.Items {
+		if !desired[ociList.Items[i].Name] {
+			if err := r.PlatformCluster.Client().Delete(ctx, &ociList.Items[i]); client.IgnoreNotFound(err) != nil {
+				return fmt.Errorf("failed to delete OCIRepository %q: %w", ociList.Items[i].Name, err)
+			}
+		}
+	}
+
+	hrList := &helmv2.HelmReleaseList{}
+	if err := r.PlatformCluster.Client().List(ctx, hrList,
+		client.InNamespace(tenantNamespace),
+		client.MatchingLabels{managedByLabel: managedByLabelValue},
+	); err != nil {
+		return fmt.Errorf("failed to list HelmReleases: %w", err)
+	}
+	for i := range hrList.Items {
+		if !desired[hrList.Items[i].Name] {
+			if err := r.PlatformCluster.Client().Delete(ctx, &hrList.Items[i]); client.IgnoreNotFound(err) != nil {
+				return fmt.Errorf("failed to delete HelmRelease %q: %w", hrList.Items[i].Name, err)
+			}
+		}
+	}
+
+	return nil
 }
 
 // StableODGNamespace computes the namespace on the workload cluster that belongs to the given ODG.
