@@ -17,8 +17,8 @@ limitations under the License.
 package controller
 
 import (
-	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -68,6 +68,9 @@ const (
 
 	// requestSuffixWorkload is the suffix used for the access request of the workload cluster.
 	requestSuffixWorkload = "--wl"
+
+	// helmValuesSuffix is the suffix used for the name of the secrets containing the Helm values
+	helmValuesSuffix = "-values"
 
 	// ociRepositoryKind and helmReleaseKind are used for status resource entries.
 	ociRepositoryKind = "OCIRepository"
@@ -144,7 +147,14 @@ func (r *ODGReconciler) reconcileChart(ctx context.Context, svcobj *apiv1alpha1.
 		return nil, fmt.Errorf("failed to replicate workload cluster image pull secrets: %w", err)
 	}
 
-	helmRel, err := r.createOrUpdateHelmRelease(ctx, chart.ChartName, tenantNamespace, odgNamespace, svcobj, chart.HelmValues)
+	helmValues := chart.HelmValues
+
+	valuesSecretName := chart.ChartName + helmValuesSuffix
+	if err := r.createOrUpdateValuesSecret(ctx, valuesSecretName, tenantNamespace, helmValues); err != nil {
+		return nil, fmt.Errorf("failed to write helm values secret: %w", err)
+	}
+
+	helmRel, err := r.createOrUpdateHelmRelease(ctx, chart.ChartName, tenantNamespace, odgNamespace, valuesSecretName, svcobj)
 	if err != nil {
 		return nil, fmt.Errorf("failed to reconcile HelmRelease: %w", err)
 	}
@@ -162,6 +172,15 @@ func (r *ODGReconciler) reconcileChart(ctx context.Context, svcobj *apiv1alpha1.
 			},
 			Phase:    ociPhase,
 			Message:  ociMsg,
+			Location: apiv1alpha1.PlatformCluster,
+		},
+		{
+			TypedObjectReference: corev1.TypedObjectReference{
+				Kind:      "Secret",
+				Name:      valuesSecretName,
+				Namespace: &tenantNamespace,
+			},
+			Phase:    apiv1alpha1.Ready,
 			Location: apiv1alpha1.PlatformCluster,
 		},
 		{
@@ -193,6 +212,9 @@ func (r *ODGReconciler) Delete(ctx context.Context, obj *apiv1alpha1.ODG, provid
 		objects = append(objects,
 			&sourcev1.OCIRepository{
 				ObjectMeta: metav1.ObjectMeta{Name: chart.ChartName, Namespace: tenantNamespace},
+			},
+			&corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: chart.ChartName + helmValuesSuffix, Namespace: tenantNamespace},
 			},
 			&helmv2.HelmRelease{
 				ObjectMeta: metav1.ObjectMeta{Name: chart.ChartName, Namespace: tenantNamespace},
@@ -393,8 +415,24 @@ func (r *ODGReconciler) replicateWorkloadImagePullSecrets(ctx context.Context, w
 	return nil
 }
 
-func (r *ODGReconciler) createOrUpdateHelmRelease(ctx context.Context, name, tenantNamespace, odgNamespace string, svcobj *apiv1alpha1.ODG, values *apiextensionsv1.JSON) (*helmv2.HelmRelease, error) {
-	helmRelease, err := r.createHelmRelease(ctx, name, tenantNamespace, odgNamespace, svcobj, values)
+func (r *ODGReconciler) createOrUpdateValuesSecret(ctx context.Context, name, namespace string, values *apiextensionsv1.JSON) error {
+	var raw []byte
+	if values != nil {
+		raw = values.Raw
+	}
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+	}
+	_, err := ctrl.CreateOrUpdate(ctx, r.PlatformCluster.Client(), secret, func() error {
+		secret.Labels = map[string]string{managedByLabel: managedByLabelValue}
+		secret.Data = map[string][]byte{"values.yaml": raw}
+		return nil
+	})
+	return err
+}
+
+func (r *ODGReconciler) createOrUpdateHelmRelease(ctx context.Context, name, tenantNamespace, odgNamespace, valuesSecretName string, svcobj *apiv1alpha1.ODG) (*helmv2.HelmRelease, error) {
+	helmRelease, err := r.createHelmRelease(ctx, name, tenantNamespace, odgNamespace, valuesSecretName, svcobj)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create helm release: %w", err)
 	}
@@ -417,14 +455,7 @@ func (r *ODGReconciler) createOrUpdateHelmRelease(ctx context.Context, name, ten
 	return managedObj, nil
 }
 
-func (r *ODGReconciler) createHelmRelease(ctx context.Context, name, tenantNamespace, odgNamespace string, svcobj *apiv1alpha1.ODG, helmValues *apiextensionsv1.JSON) (*helmv2.HelmRelease, error) {
-	if helmValues != nil {
-		// TODO patch in the values more elaborately
-		helmValues = &apiextensionsv1.JSON{
-			Raw: bytes.ReplaceAll(helmValues.Raw, []byte("odg-system"), []byte(odgNamespace)),
-		}
-	}
-
+func (r *ODGReconciler) createHelmRelease(ctx context.Context, name, tenantNamespace, odgNamespace, valuesSecretName string, svcobj *apiv1alpha1.ODG) (*helmv2.HelmRelease, error) {
 	fluxConfigRef, err := r.getWorkloadFluxConfig(ctx, tenantNamespace, svcobj.Name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get FluxConfig: %w", err)
@@ -461,7 +492,10 @@ func (r *ODGReconciler) createHelmRelease(ctx context.Context, name, tenantNames
 				Name:      name,
 				Namespace: tenantNamespace,
 			},
-			Values: helmValues,
+			ValuesFrom: []helmv2.ValuesReference{{
+				Kind: "Secret",
+				Name: valuesSecretName,
+			}},
 			KubeConfig: &meta.KubeConfigReference{
 				SecretRef: fluxConfigRef,
 			},
@@ -531,6 +565,15 @@ func managedResources(tenantNamespace string, charts []apiv1alpha1.ODGChart, pha
 			},
 			apiv1alpha1.ManagedResource{
 				TypedObjectReference: corev1.TypedObjectReference{
+					Kind:      "Secret",
+					Name:      chart.ChartName + helmValuesSuffix,
+					Namespace: stringPtr(tenantNamespace),
+				},
+				Phase:    phase,
+				Location: apiv1alpha1.PlatformCluster,
+			},
+			apiv1alpha1.ManagedResource{
+				TypedObjectReference: corev1.TypedObjectReference{
 					APIGroup:  stringPtr(helmv2.GroupVersion.Group),
 					Kind:      helmReleaseKind,
 					Name:      chart.ChartName,
@@ -576,12 +619,25 @@ func (r *ODGReconciler) deleteRemovedCharts(ctx context.Context, tenantNamespace
 	}
 	for i := range hrList.Items {
 		if !desired[hrList.Items[i].Name] {
-			if err := r.PlatformCluster.Client().Delete(ctx, &hrList.Items[i]); client.IgnoreNotFound(err) != nil {
-				return fmt.Errorf("failed to delete HelmRelease %q: %w", hrList.Items[i].Name, err)
+			if err := r.deleteRemovedChart(ctx, tenantNamespace, hrList.Items[i].Name); err != nil {
+				return err
 			}
 		}
 	}
 
+	return nil
+}
+
+func (r *ODGReconciler) deleteRemovedChart(ctx context.Context, tenantNamespace, chartName string) error {
+	hr := &helmv2.HelmRelease{ObjectMeta: metav1.ObjectMeta{Name: chartName, Namespace: tenantNamespace}}
+	if err := r.PlatformCluster.Client().Delete(ctx, hr); client.IgnoreNotFound(err) != nil {
+		return fmt.Errorf("failed to delete HelmRelease %q: %w", chartName, err)
+	}
+	secretName := chartName + helmValuesSuffix
+	secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: tenantNamespace}}
+	if err := r.PlatformCluster.Client().Delete(ctx, secret); client.IgnoreNotFound(err) != nil {
+		return fmt.Errorf("failed to delete values secret %q: %w", secretName, err)
+	}
 	return nil
 }
 
