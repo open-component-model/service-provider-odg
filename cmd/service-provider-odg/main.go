@@ -66,6 +66,10 @@ import (
 	// +kubebuilder:scaffold:imports
 )
 
+const (
+	PurposeWorkloadODG = "workload-odg"
+)
+
 var (
 	platformScheme   = runtime.NewScheme()
 	onboardingScheme = runtime.NewScheme()
@@ -384,7 +388,7 @@ func main() {
 		},
 	}
 	workloadClusterRequest := advanced.NewClusterRequest("workload", "wl", advanced.StaticClusterRequestSpecGenerator(&clustersv1alpha1.ClusterRequestSpec{
-		Purpose: clustersv1alpha1.PURPOSE_WORKLOAD,
+		Purpose: PurposeWorkloadODG,
 	})).
 		WithNamespaceGenerator(advanced.DefaultNamespaceGeneratorForMCP).
 		WithTokenAccess(workloadTokenAccessConfig).
