@@ -35,26 +35,22 @@ type ProviderConfigSpec struct {
 	// The following markers will use OpenAPI v3 schema to validate the value
 	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
 
-	// foo is an example field of ProviderConfig. Edit providerconfig_types.go to remove/update
+	// Charts defines a list of ODG Helm charts that can be installed.
+	// +required
+	Charts []ODGChart `json:"charts"`
+
+	// PollInterval at which the controller requeues to detect drift.
 	// +optional
 	// +kubebuilder:default:="1m"
 	// +kubebuilder:validation:Format=duration
 	PollInterval *metav1.Duration `json:"pollInterval,omitempty"`
-
-	Versions []ODGVersion `json:"versions"`
 }
 
-// ODGVersion defines a version of the ODG that can be installed.
-type ODGVersion struct {
-	// ChartVersion is the tag of the Helm chart to install.
+// ODGChart defines a Helm chart of ODG that can be installed.
+type ODGChart struct {
+	// ChartName is a unique name of the Helm chart.
 	// +required
-	ChartVersion string `json:"chartVersion"`
-
-	// ChartURL is a reference to an OCI repository that hosts the ODG Helm chart.
-	// An "oci://" prefix is added automatically when missing.
-	// +optional
-	// +kubebuilder:default="oci://europe-docker.pkg.dev/gardener-project/releases/charts/odg/delivery-dashboard"
-	ChartURL *string `json:"chartURL,omitempty"`
+	ChartName string `json:"chartName"`
 
 	// ChartPullSecretName is the name of a secret in the controller's namespace holding the
 	// credentials to pull the Helm chart. It is replicated into the tenant namespace and
@@ -63,9 +59,16 @@ type ODGVersion struct {
 	// +optional
 	ChartPullSecretName string `json:"chartPullSecretName,omitempty"`
 
+	// ChartURL is a reference to an OCI repository that hosts the ODG Helm chart.
+	// An "oci://" prefix is added automatically when missing.
+	// +required
+	ChartURL *string `json:"chartURL"`
+
+	// ChartVersion is the tag of the Helm chart to install.
+	// +required
+	ChartVersion string `json:"chartVersion"`
+
 	// HelmValues are arbitrary Helm values passed directly to the managed HelmRelease.
-	// Secrets referenced under `manager.imagePullSecrets` are replicated from the
-	// controller's namespace into the ODG namespace on the control plane.
 	// +optional
 	HelmValues *apiextensionsv1.JSON `json:"helmValues,omitempty"`
 }

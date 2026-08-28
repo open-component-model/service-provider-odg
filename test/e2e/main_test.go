@@ -30,7 +30,7 @@ func TestMain(m *testing.M) {
 		Operator: setup.OpenMCPOperatorSetup{
 			Name: "openmcp-operator",
 			// renovate: datasource=docker depName=ghcr.io/openmcp-project/images/openmcp-operator
-			Image:        "ghcr.io/openmcp-project/images/openmcp-operator:v1.1.0",
+			Image:        "ghcr.io/openmcp-project/images/openmcp-operator:v1.3.0",
 			Environment:  "debug",
 			PlatformName: "platform",
 		},
@@ -38,7 +38,7 @@ func TestMain(m *testing.M) {
 			{
 				Name: "kind",
 				// renovate: datasource=docker depName=ghcr.io/openmcp-project/images/cluster-provider-kind
-				Image: "ghcr.io/openmcp-project/images/cluster-provider-kind:v0.5.0",
+				Image: "ghcr.io/openmcp-project/images/cluster-provider-kind:v0.6.0",
 			},
 		},
 		ServiceProviders: []providers.ServiceProviderSetup{

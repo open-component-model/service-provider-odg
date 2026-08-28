@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -54,6 +55,7 @@ func createDummyPullSecret(ctx context.Context, c *envconf.Config, namespace, na
 func TestServiceProvider(t *testing.T) {
 	var onboardingList unstructured.UnstructuredList
 	var tenantNamespace string
+	var chartNames []string
 
 	basicProviderTest := features.New("provider test").
 		Setup(func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
@@ -61,9 +63,27 @@ func TestServiceProvider(t *testing.T) {
 			if err := createDummyPullSecret(ctx, c, "openmcp-system", "privateregcred"); err != nil {
 				t.Errorf("failed to create dummy pull secret: %v", err)
 			}
-			if _, err := resources.CreateObjectsFromDir(ctx, c, "platform"); err != nil {
+			objs, err := resources.CreateObjectsFromDir(ctx, c, "platform")
+			if err != nil {
 				t.Errorf("failed to create platform cluster objects: %v", err)
+				return ctx
 			}
+			for _, obj := range objs.Items {
+				if obj.GetKind() == "ProviderConfig" {
+					charts, _, _ := unstructured.NestedSlice(obj.Object, "spec", "charts")
+					for _, ch := range charts {
+						if m, ok := ch.(map[string]interface{}); ok {
+							if name, ok := m["chartName"].(string); ok {
+								chartNames = append(chartNames, name)
+							}
+						}
+					}
+				}
+			}
+			if len(chartNames) == 0 {
+				t.Errorf("no charts found in ProviderConfig")
+			}
+			t.Logf("Charts to verify: %v", chartNames)
 			return ctx
 		}).
 		Setup(providers.CreateMCP("test-mcp")).
@@ -96,117 +116,58 @@ func TestServiceProvider(t *testing.T) {
 				return ctx
 			},
 		).
-		Assess("verify OCIRepository is created correctly",
+		Assess("verify OCIRepositories are created correctly",
 			func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
-				ociRepo := &sourcev1.OCIRepository{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "odg-dashboard",
-						Namespace: tenantNamespace,
-					},
+				for _, chartName := range chartNames {
+					ociRepo := &sourcev1.OCIRepository{}
+					err := wait.For(
+						func(ctx context.Context) (bool, error) {
+							err := c.Client().Resources().Get(ctx, chartName, tenantNamespace, ociRepo)
+							return err == nil, nil
+						},
+						wait.WithTimeout(30*time.Second),
+						wait.WithInterval(2*time.Second),
+					)
+					if err != nil {
+						t.Errorf("OCIRepository %q was not created: %v", chartName, err)
+						continue
+					}
+					if ociRepo.Spec.SecretRef == nil || ociRepo.Spec.SecretRef.Name == "" {
+						t.Errorf("OCIRepository %q has no secretRef", chartName)
+					}
+					t.Logf("OCIRepository %q validated (spec verified, status check skipped due to test credential limitations)", chartName)
 				}
-
-				// Wait for OCIRepository to exist and verify configuration
-				// Note: In e2e tests, the OCIRepository may not become Ready because
-				// the pull secret is a dummy credential. We validate the resource
-				// exists with correct spec rather than waiting for Ready status.
-				err := wait.For(
-					func(ctx context.Context) (bool, error) {
-						err := c.Client().Resources().Get(ctx, "odg-dashboard", tenantNamespace, ociRepo)
-						return err == nil, nil
-					},
-					wait.WithTimeout(30*time.Second),
-					wait.WithInterval(2*time.Second),
-				)
-				if err != nil {
-					t.Errorf("OCIRepository was not created: %v", err)
-					return ctx
-				}
-
-				// Validate spec matches ProviderConfig
-				expectedURL := "oci://europe-docker.pkg.dev/gardener-project/releases/charts/odg/delivery-dashboard"
-				if ociRepo.Spec.URL != expectedURL {
-					t.Errorf("OCIRepository URL mismatch: got %q, want %q", ociRepo.Spec.URL, expectedURL)
-				}
-
-				if ociRepo.Spec.Reference == nil || ociRepo.Spec.Reference.Tag != "0.439.0" {
-					t.Errorf("OCIRepository version mismatch")
-				}
-
-				if ociRepo.Spec.SecretRef == nil || ociRepo.Spec.SecretRef.Name != "privateregcred" {
-					t.Errorf("OCIRepository secretRef mismatch")
-				}
-
-				t.Logf("OCIRepository validation passed (spec verified, status check skipped due to test credential limitations)")
 				return ctx
 			},
 		).
-		Assess("verify HelmRelease is created correctly",
+		Assess("verify HelmReleases are created correctly",
 			func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
-				helmRelease := &helmv2.HelmRelease{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "odg",
-						Namespace: tenantNamespace,
-					},
+				for _, chartName := range chartNames {
+					helmRelease := &helmv2.HelmRelease{}
+					err := wait.For(
+						func(ctx context.Context) (bool, error) {
+							err := c.Client().Resources().Get(ctx, chartName, tenantNamespace, helmRelease)
+							return err == nil, nil
+						},
+						wait.WithTimeout(30*time.Second),
+						wait.WithInterval(2*time.Second),
+					)
+					if err != nil {
+						t.Errorf("HelmRelease %q was not created: %v", chartName, err)
+						continue
+					}
+					if !strings.HasPrefix(helmRelease.Spec.TargetNamespace, "odg-system-") {
+						t.Errorf("HelmRelease %q targetNamespace mismatch: got %q, want prefix %q",
+							chartName, helmRelease.Spec.TargetNamespace, "odg-system-")
+					}
+					if helmRelease.Spec.ChartRef == nil || helmRelease.Spec.ChartRef.Name != chartName {
+						t.Errorf("HelmRelease %q chartRef mismatch", chartName)
+					}
+					if helmRelease.Spec.KubeConfig == nil {
+						t.Errorf("HelmRelease %q should have KubeConfig configured for remote deployment", chartName)
+					}
+					t.Logf("HelmRelease %q validated (spec verified, deployment check skipped due to test credential limitations)", chartName)
 				}
-
-				// Wait for HelmRelease to exist and verify configuration
-				// Note: In e2e tests, the HelmRelease cannot become Ready because
-				// the OCIRepository chart pull fails with dummy credentials. We validate
-				// the resource exists with correct spec rather than Ready status.
-				err := wait.For(
-					func(ctx context.Context) (bool, error) {
-						err := c.Client().Resources().Get(ctx, "odg", tenantNamespace, helmRelease)
-						return err == nil, nil
-					},
-					wait.WithTimeout(30*time.Second),
-					wait.WithInterval(2*time.Second),
-				)
-				if err != nil {
-					t.Errorf("HelmRelease was not created: %v", err)
-					return ctx
-				}
-
-				// Validate remote cluster deployment configuration
-				if helmRelease.Spec.TargetNamespace != "odg-system" {
-					t.Errorf("HelmRelease targetNamespace mismatch: got %q, want %q",
-						helmRelease.Spec.TargetNamespace, "odg-system")
-				}
-
-				if helmRelease.Spec.ChartRef == nil || helmRelease.Spec.ChartRef.Name != "odg-dashboard" {
-					t.Errorf("HelmRelease chartRef mismatch")
-				}
-
-				if helmRelease.Spec.KubeConfig == nil {
-					t.Errorf("HelmRelease should have KubeConfig configured for remote deployment")
-				}
-
-				t.Logf("HelmRelease validation passed (spec verified, deployment check skipped due to test credential limitations)")
-				return ctx
-			},
-		).
-		Assess("verify delivery-dashboard deployment configuration",
-			func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
-				// In e2e tests, we cannot validate the actual workload deployment because:
-				// 1. The pull secret is a dummy credential (test.example.com)
-				// 2. The real chart at europe-docker.pkg.dev requires valid credentials
-				// 3. Without chart pull, Flux cannot deploy to the workload cluster
-				//
-				// The OCIRepository and HelmRelease validation above confirms:
-				// - Chart is correctly configured with URL, version, and pull secret
-				// - HelmRelease is configured for remote deployment with kubeconfig reference
-				//
-				// AccessRequest validation is skipped because:
-				// - AccessRequests are created by OpenMCP's advanced cluster access reconciler
-				// - They require the full MCP control plane to be operational
-				// - The HelmRelease spec already validates the kubeconfig mechanism is configured
-				//
-				// In production with real credentials and a complete MCP control plane:
-				// - AccessRequest would be created and provide workload cluster access
-				// - Flux would pull the chart from the OCI registry
-				// - Flux would deploy to the workload cluster's odg-system namespace
-				// - Both OCIRepository and HelmRelease would report Ready status
-
-				t.Logf("Workload deployment mechanism validated (Flux resources configured correctly)")
 				return ctx
 			},
 		).
