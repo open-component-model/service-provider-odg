@@ -170,6 +170,54 @@ func TestServiceProvider(t *testing.T) {
 				return ctx
 			},
 		).
+		Assess("verify bootstrapping values secret merges ConfigMap and Secret refs",
+			func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+				valuesSecret := &corev1.Secret{}
+				err := wait.For(
+					func(ctx context.Context) (bool, error) {
+						err := c.Client().Resources().Get(ctx, "bootstrapping-values", tenantNamespace, valuesSecret)
+						return err == nil, nil
+					},
+					wait.WithTimeout(30*time.Second),
+					wait.WithInterval(2*time.Second),
+				)
+				if err != nil {
+					t.Errorf("bootstrapping-values Secret was not created: %v", err)
+					return ctx
+				}
+
+				raw, ok := valuesSecret.Data["values.yaml"]
+				if !ok {
+					t.Errorf("bootstrapping-values Secret has no values.yaml key")
+					return ctx
+				}
+
+				var merged map[string]any
+				if err := json.Unmarshal(raw, &merged); err != nil {
+					t.Errorf("bootstrapping-values Secret values.yaml is not valid JSON: %v", err)
+					return ctx
+				}
+
+				// ConfigMap contribution: extensions_cfg key must be present
+				if _, ok := merged["extensions_cfg"]; !ok {
+					t.Errorf("bootstrapping-values missing extensions_cfg (expected from ConfigurationRef ConfigMap)")
+				}
+
+				// Secret contribution: secrets key must be present and override/extend ConfigMap
+				if _, ok := merged["secrets"]; !ok {
+					t.Errorf("bootstrapping-values missing secrets (expected from SecretsRef Secret)")
+				}
+
+				t.Logf("bootstrapping-values Secret contains merged keys: %v", func() []string {
+					keys := make([]string, 0, len(merged))
+					for k := range merged {
+						keys = append(keys, k)
+					}
+					return keys
+				}())
+				return ctx
+			},
+		).
 		Assess("verify domain objects can be created", providers.ImportDomainAPIs("test-mcp", "mcp")).
 		Teardown(func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
 			onboardingConfig, err := clusterutils.OnboardingConfig()

@@ -36,6 +36,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	sigsyaml "sigs.k8s.io/yaml"
 
 	"github.com/openmcp-project/controller-utils/pkg/clusters"
 	clusteraccess "github.com/openmcp-project/opencontrolplane-runtime/pkg/serviceprovider/clusteraccess"
@@ -148,6 +149,13 @@ func (r *ODGReconciler) reconcileChart(ctx context.Context, svcobj *apiv1alpha1.
 	}
 
 	helmValues := chart.HelmValues
+	if chart.ChartName == "bootstrapping" {
+		var err error
+		helmValues, err = r.mergeODGConfiguration(ctx, helmValues, svcobj)
+		if err != nil {
+			return nil, fmt.Errorf("failed to merge ODG configuration into helm values: %w", err)
+		}
+	}
 
 	valuesSecretName := chart.ChartName + helmValuesSuffix
 	if err := r.createOrUpdateValuesSecret(ctx, valuesSecretName, tenantNamespace, helmValues); err != nil {
@@ -647,4 +655,100 @@ func StableODGNamespace(onboardingNamespace, onboardingName string) string {
 	// Use a tenant agnostic namespace for now (assume each ODG runs in a dedicated cluster)
 	// res := controller.NameHashSHAKE128Base32(onboardingNamespace, onboardingName)
 	return OdgSystemNamespacePrefix
+}
+
+// mergeODGConfiguration fetches the ConfigMap and Secret referenced in the ODG spec,
+// parses the "values.yaml" key from each as JSON, and merges them (Secret on top) into base.
+func (r *ODGReconciler) mergeODGConfiguration(ctx context.Context, base *apiextensionsv1.JSON, svcobj *apiv1alpha1.ODG) (*apiextensionsv1.JSON, error) {
+	result := base
+
+	if ref := svcobj.Spec.ConfigurationRef; ref != nil {
+		cm := &corev1.ConfigMap{}
+		if err := r.OnboardingCluster.Client().Get(ctx, client.ObjectKey{Name: ref.Name, Namespace: svcobj.Namespace}, cm); err != nil {
+			return nil, fmt.Errorf("failed to get ConfigMap %q: %w", ref.Name, err)
+		}
+		overlay, err := dataToJSON([]byte(cm.Data["values.yaml"]))
+		if err != nil {
+			return nil, fmt.Errorf("ConfigMap %q values.yaml: %w", ref.Name, err)
+		}
+		if result, err = mergeHelmValues(result, overlay); err != nil {
+			return nil, err
+		}
+	}
+
+	if ref := svcobj.Spec.SecretsRef; ref != nil {
+		secret := &corev1.Secret{}
+		if err := r.OnboardingCluster.Client().Get(ctx, client.ObjectKey{Name: ref.Name, Namespace: svcobj.Namespace}, secret); err != nil {
+			return nil, fmt.Errorf("failed to get Secret %q: %w", ref.Name, err)
+		}
+		overlay, err := dataToJSON(secret.Data["values.yaml"])
+		if err != nil {
+			return nil, fmt.Errorf("secret %q values.yaml: %w", ref.Name, err)
+		}
+		if result, err = mergeHelmValues(result, overlay); err != nil {
+			return nil, err
+		}
+	}
+
+	return result, nil
+}
+
+// dataToJSON converts raw YAML or JSON bytes to canonical JSON for merging.
+// Returns nil (not an error) when data is empty.
+func dataToJSON(data []byte) (*apiextensionsv1.JSON, error) {
+	if len(data) == 0 {
+		return nil, nil
+	}
+	jsonBytes, err := sigsyaml.YAMLToJSON(data)
+	if err != nil {
+		return nil, fmt.Errorf("yaml to json: %w", err)
+	}
+	return &apiextensionsv1.JSON{Raw: jsonBytes}, nil
+}
+
+// mergeHelmValues performs a deep JSON merge of overlay on top of base.
+// Map values are merged recursively; all other types are overwritten by the overlay.
+// Returns nil when both inputs are nil.
+func mergeHelmValues(base, overlay *apiextensionsv1.JSON) (*apiextensionsv1.JSON, error) {
+	if overlay == nil {
+		return base, nil
+	}
+	if base == nil {
+		return overlay, nil
+	}
+
+	var baseMap, overlayMap map[string]any
+	if err := json.Unmarshal(base.Raw, &baseMap); err != nil {
+		return nil, fmt.Errorf("unmarshal base helm values: %w", err)
+	}
+	if err := json.Unmarshal(overlay.Raw, &overlayMap); err != nil {
+		return nil, fmt.Errorf("unmarshal overlay helm values: %w", err)
+	}
+
+	deepMerge(baseMap, overlayMap)
+
+	raw, err := json.Marshal(baseMap)
+	if err != nil {
+		return nil, fmt.Errorf("marshal merged helm values: %w", err)
+	}
+	return &apiextensionsv1.JSON{Raw: raw}, nil
+}
+
+// deepMerge merges src into dst in place. Nested maps are merged recursively;
+// any other type in src overwrites the value in dst.
+func deepMerge(dst, src map[string]any) {
+	for k, srcVal := range src {
+		dstVal, exists := dst[k]
+		if !exists {
+			dst[k] = srcVal
+			continue
+		}
+		srcMap, srcIsMap := srcVal.(map[string]any)
+		dstMap, dstIsMap := dstVal.(map[string]any)
+		if srcIsMap && dstIsMap {
+			deepMerge(dstMap, srcMap)
+		} else {
+			dst[k] = srcVal
+		}
+	}
 }

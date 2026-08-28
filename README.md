@@ -29,12 +29,23 @@ kind: ODG
 metadata:
   name: mcp-01 # must match your MCP cluster so it will track the right cluster
 spec:
-  foo: bar
+  configurationRef:
+    name: mcp-01-odg-config   # ConfigMap in the same namespace
+  secretsRef:
+    name: mcp-01-odg-secrets  # Secret in the same namespace
 ```
 
-| Field          | Type     | Required | Description                                                                                            |
-| -------------- | -------- | -------- | --------------------------- |
-| `spec.foo`     | `string` | no       | Only a dummy value for now. |
+Both the `ConfigMap` and the `Secret` must have a `values.yaml` key containing a YAML document
+whose structure mirrors the bootstrapping chart's values schema. The controller deep-merges them
+in order — `configurationRef` first, `secretsRef` on top — and writes the result into the Helm
+values `Secret` for the `bootstrapping` chart.
+
+| Field                        | Type     | Required     | Description                                                                                                                                                              |
+|------------------------------|----------|--------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `spec.configurationRef`      | `object` | no           | Reference to a `ConfigMap` in the same namespace. Its `values.yaml` key is merged into the bootstrapping chart's Helm values.                                            |
+| `spec.configurationRef.name` | `string` | yes (if set) | Name of the `ConfigMap`.                                                                                                                                                 |
+| `spec.secretsRef`            | `object` | no           | Reference to a `Secret` in the same namespace. Its `values.yaml` key is merged on top of the ConfigMap values. Use this for sensitive configuration such as credentials. |
+| `spec.secretsRef.name`       | `string` | yes (if set) | Name of the `Secret`.                                                                                                                                                    |
 
 _Note_: The name of the object _**MUST**_ match the name of your MCP cluster offering. This
 ensures that only one installation can exist for a given cluster.
@@ -78,7 +89,7 @@ A chart item (`spec.charts[]`) is defined as follows:
 
 | Field                  | Type     | Required | Default | Description                                                                                                                                                                            |
 |------------------------|----------|----------|---------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `chartName`            | `string` | yes      | —       | Unique name of the Helm chart. Used as the name of the generated `OCIRepository`, values `Secret`, and `HelmRelease`.                                                                 |
+| `chartName`            | `string` | yes      | —       | Unique name of the Helm chart. Used as the name of the generated `OCIRepository`, values `Secret`, and `HelmRelease`.                                                                  |
 | `chartURL`             | `string` | yes      | —       | OCI URL of the Helm chart. An `oci://` prefix is added automatically if missing.                                                                                                       |
 | `chartVersion`         | `string` | yes      | —       | Tag of the Helm chart to install.                                                                                                                                                      |
 | `chartPullSecretName`  | `string` | no       | —       | Name of a secret in the controller's namespace to replicate into the tenant namespace and set as `secretRef` on the `OCIRepository`. Must be of type `kubernetes.io/dockerconfigjson`. |
