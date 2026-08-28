@@ -2,6 +2,9 @@ name: E2E Tests
 
 on:
   pull_request:
+  push:
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -28,8 +31,7 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: task generate
-        run: |
-          task generate --verbose
+        run: task generate --verbose
 
       - name: task validate
         run: task validate --verbose

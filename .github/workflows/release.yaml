@@ -11,5 +11,8 @@ permissions:
 
 jobs:
   release_tag:
-    uses: openmcp-project/build/.github/workflows/release.lib.yaml@2857d51e2d98261233de19e6df4e49f20db8bbda # main
-    secrets: inherit
+    uses: openmcp-project/build/.github/workflows/release.lib.yaml@c2d37b930a47b3596b919583887f92c7e37987e3 # main
+    secrets:
+      app_private_key: ${{ secrets.ODG_BOT_PRIVATE_KEY }}
+    with:
+      app_id: ${{ vars.ODG_BOT_APP_ID }}

@@ -1,5 +1,8 @@
 version: 3
 
+env:
+  BASE_REGISTRY: ghcr.io/open-component-model
+
 vars:
   NESTED_MODULES: api
   API_DIRS: '{{.ROOT_DIR}}/api/v1alpha1/...'
@@ -37,7 +40,7 @@ tasks:
     desc: "Build image for current platform and tag without suffix for testing"
     cmds:
       - task: build:img:build
-      - docker tag ghcr.io/openmcp-project/images/{{.COMPONENTS}}:{{.VERSION}}-linux-{{ARCH}} ghcr.io/openmcp-project/images/{{.COMPONENTS}}:{{.VERSION}}
+      - docker tag ${BASE_REGISTRY}/images/{{.COMPONENTS}}:{{.VERSION}}-linux-{{ARCH}} ${BASE_REGISTRY}/images/{{.COMPONENTS}}:{{.VERSION}}
     vars:
       VERSION:
         sh: $COMMON_SCRIPT_DIR/get-version.sh
