@@ -38,7 +38,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/openmcp-project/controller-utils/pkg/clusters"
-	"github.com/openmcp-project/controller-utils/pkg/controller"
 	clusteraccess "github.com/openmcp-project/opencontrolplane-runtime/pkg/serviceprovider/clusteraccess"
 	"github.com/openmcp-project/openmcp-operator/lib/clusteraccess/advanced"
 
@@ -65,7 +64,7 @@ const (
 	conditionReasonError = "ReconcileError"
 
 	// OdgSystemNamespacePrefix is the namespace prefix on the target cluster to deploy ODG components into.
-	OdgSystemNamespacePrefix = "odg-system-"
+	OdgSystemNamespacePrefix = "odg-system"
 
 	// requestSuffixWorkload is the suffix used for the access request of the workload cluster.
 	requestSuffixWorkload = "--wl"
@@ -589,7 +588,7 @@ func (r *ODGReconciler) deleteRemovedCharts(ctx context.Context, tenantNamespace
 // StableODGNamespace computes the namespace on the workload cluster that belongs to the given ODG.
 // onboardingName and onboardingNamespace are name and namespace of the ODG resource on the onboarding cluster.
 func StableODGNamespace(onboardingNamespace, onboardingName string) string {
-	res := controller.NameHashSHAKE128Base32(onboardingNamespace, onboardingName)
-
-	return OdgSystemNamespacePrefix + res
+	// Use a tenant agnostic namespace for now (assume each ODG runs in a dedicated cluster)
+	// res := controller.NameHashSHAKE128Base32(onboardingNamespace, onboardingName)
+	return OdgSystemNamespacePrefix
 }
