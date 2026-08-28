@@ -23,11 +23,10 @@ func getTenantNamespace(mcpName, mcpNamespace string) (string, error) {
 // The AccessRequest is created by the advanced cluster access reconciler and contains
 // the kubeconfig secret reference in its status.
 func getWorkloadClusterClient(ctx context.Context, platformCfg *envconf.Config, tenantNamespace, mcpName string) (*rest.Config, error) {
-	// AccessRequest naming follows the pattern used in the controller:
-	// stableRequestNameFromLocalName(providerName, objectName) + requestSuffixWorkload
+	// AccessRequest naming follows the pattern used by the advanced cluster access reconciler:
+	// providerName + "--" + objectName + requestSuffixWorkload
 	// where providerName = "odg" and requestSuffixWorkload = "--wl-odg"
-	// The stable naming includes the full group name
-	accessRequestName := fmt.Sprintf("odg.services.open-control-plane.io--%s--wl-odg", mcpName)
+	accessRequestName := fmt.Sprintf("odg--%s--wl-odg", mcpName)
 
 	accessRequest := &clustersv1alpha1.AccessRequest{}
 	err := platformCfg.Client().Resources().Get(ctx, accessRequestName, tenantNamespace, accessRequest)

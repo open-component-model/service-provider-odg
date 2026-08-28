@@ -46,11 +46,47 @@ Then execute the template, for example:
 go run ./cmd/template -module github.com/yourorg/yourrepo -kind YourKind -group yourgroup
 ```
 
-Running End-to-End tests:
+## Running Locally
+
+The e2e tests spin up a full local OCP environment with four kind clusters (platform, onboarding, mcp, workload-odg) and verify the ODG deployment flow: pull secret replication, OCIRepository/HelmRelease creation, chart installation, and pod deployment to the dedicated workload cluster.
+
+### Prerequisites
+
+- Docker (8 GB+ RAM allocated)
+- Go 1.26 (not 1.27+ — the linter cannot decode Go 1.27 export data)
+- [Task](https://taskfile.dev) (`go-task`)
+- Flux CLI (installed automatically by `task install-flux`)
+
+### Starting a local cluster
+
+The e2e test doubles as a local cluster setup. With `--keep-clusters`, the test runs normally but skips teardown, leaving the clusters alive for debugging:
 
 ```shell
-task test-e2e
+PATH="/opt/homebrew/opt/go@1.26/bin:$PATH" task test-e2e -- --keep-clusters
 ```
+
+Without the flag, clusters are torn down after tests:
+
+```shell
+PATH="/opt/homebrew/opt/go@1.26/bin:$PATH" task test-e2e
+```
+
+### What the test environment sets up
+
+The test framework (`main_test.go`) configures:
+
+- **`workload-odg` purpose mapping** — the scheduler doesn't know this purpose yet, so it's added via `ExtraClusterPurposeMapping` (kind, Exclusive)
+- **FluxCD extension** — installs Flux on the platform cluster during Bootstrap (before platform services), so the SP controller can create OCIRepository/HelmRelease resources
+- **Platform service gateway** — installs Envoy Gateway (including Gateway API CRDs) on `workload-odg` clusters via a `GatewayServiceConfig` with `matchPurpose: workload-odg`. Required because the ODG Helm charts include `HTTPRoute` resources
+- **Dummy pull secret** — creates a `privateregcred` secret in the SP pod namespace to test the controller's secret replication code path
+
+### Once `workload-odg` is upstreamed
+
+When the `workload-odg` purpose is added to the ocp main libraries (ocpctl default ConfigMap, platform-service-gateway defaults), the test setup will be simpler:
+
+- `ExtraClusterPurposeMapping` for `workload-odg` in `main_test.go` can be removed (ocpctl will include it by default)
+- `test/e2e/platformservice-gateway/gateway.yaml` can be removed (the default `GatewayServiceConfig` will include `matchPurpose: workload-odg`)
+- The FluxCD extension and the PlatformServices gateway entry will still be needed (they are test infrastructure, not purpose-mapping concerns)
 
 For a detailed guide on setup and usage, please refer to the full [Service Provider Development Guide](https://openmcp-project.github.io/docs/developers/serviceprovider/service-providers).
 

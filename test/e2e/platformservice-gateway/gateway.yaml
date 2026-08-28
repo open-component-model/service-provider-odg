@@ -1,0 +1,23 @@
+apiVersion: gateway.openmcp.cloud/v1alpha1
+kind: GatewayServiceConfig
+metadata:
+  name: gateway
+spec:
+  envoyGateway:
+    images:
+      proxy: "ghcr.io/openmcp-project/components/github.com/openmcp-project/openmcp/images/envoy-proxy:distroless-v1.36.2"
+      gateway: "ghcr.io/openmcp-project/components/github.com/openmcp-project/openmcp/images/envoy-gateway:v1.5.4"
+      rateLimit: "ghcr.io/openmcp-project/components/github.com/openmcp-project/openmcp/images/envoy-ratelimit:99d85510"
+    chart:
+      url: "oci://ghcr.io/openmcp-project/components/github.com/openmcp-project/openmcp/charts/envoy-gateway"
+      tag: "1.5.4"
+
+  clusters:
+    - selector:
+        matchPurpose: platform
+    - selector:
+        matchPurpose: workload
+    - selector:
+        matchPurpose: workload-odg
+  dns:
+    baseDomain: dev.openmcp.local

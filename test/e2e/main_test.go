@@ -9,18 +9,21 @@ import (
 	"strings"
 	"testing"
 
-	helmv2 "github.com/fluxcd/helm-controller/api/v2"
-	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/e2e-framework/pkg/env"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
 
+	"github.com/openmcp-project/openmcp-testing/pkg/platformservices"
 	"github.com/openmcp-project/openmcp-testing/pkg/providers"
 	"github.com/openmcp-project/openmcp-testing/pkg/setup"
+	"github.com/openmcp-project/openmcp-testing/pkg/setup/extensions"
+	"github.com/openmcp-project/openmcp-testing/pkg/setup/extensions/fluxcd"
 )
 
 var testenv env.Environment
+
+var keepClusters = flag.Bool("keep-clusters", false, "Keep clusters alive after tests (skips teardown)")
 
 func TestMain(m *testing.M) {
 	initLogging()
@@ -33,6 +36,13 @@ func TestMain(m *testing.M) {
 			Image:        "ghcr.io/openmcp-project/images/openmcp-operator:v1.3.0",
 			Environment:  "debug",
 			PlatformName: "platform",
+			ExtraClusterPurposeMapping: []providers.ClusterPurposeMapping{
+				{
+					Purpose: "workload-odg",
+					Profile: "kind",
+					Tenancy: "Exclusive",
+				},
+			},
 		},
 		ClusterProviders: []providers.ClusterProviderSetup{
 			{
@@ -48,41 +58,28 @@ func TestMain(m *testing.M) {
 				LoadImageToCluster: true,
 			},
 		},
+		PlatformServices: []platformservices.PlatformServiceSetup{
+			{
+				Name:                      "gateway",
+				Image:                     "ghcr.io/openmcp-project/images/platform-service-gateway:v0.0.10",
+				PlatformServiceConfigsDir: "platformservice-gateway",
+			},
+		},
+		Extensions: []extensions.Extension{
+			&fluxcd.FluxCD{},
+		},
 	}
 	testenv = env.NewWithConfig(envconf.New().WithNamespace(openmcp.Namespace))
+	if *keepClusters {
+		testenv.Finish(func(ctx context.Context, c *envconf.Config) (context.Context, error) {
+			klog.Info("--keep-clusters set: skipping teardown, keeping clusters alive")
+			os.Exit(0)
+			return ctx, nil
+		})
+	}
 	openmcp.Bootstrap(testenv)
-	testenv.Setup(installFlux, registerFluxSchemes, registerAccessRequestScheme)
+	testenv.Setup(registerAccessRequestScheme)
 	os.Exit(testenv.Run(m))
-}
-
-func installFlux(ctx context.Context, cfg *envconf.Config) (context.Context, error) {
-	// Use flux binary from bin directory if available, otherwise fall back to PATH
-	fluxBinary := "../../bin/flux"
-	if _, err := os.Stat(fluxBinary); os.IsNotExist(err) {
-		fluxBinary = "flux" // Fall back to PATH
-	}
-
-	args := []string{"install"}
-	if kubeconfig := cfg.KubeconfigFile(); kubeconfig != "" {
-		args = append(args, "--kubeconfig", kubeconfig)
-	}
-	out, err := exec.Command(fluxBinary, args...).CombinedOutput()
-	if err != nil {
-		return nil, fmt.Errorf("flux install failed: %w: %s", err, string(out))
-	}
-	klog.Infof("flux install output: %s", string(out))
-	return ctx, nil
-}
-
-func registerFluxSchemes(ctx context.Context, cfg *envconf.Config) (context.Context, error) {
-	scheme := cfg.Client().Resources().GetScheme()
-	if err := helmv2.AddToScheme(scheme); err != nil {
-		return ctx, fmt.Errorf("failed to register helm-controller scheme: %w", err)
-	}
-	if err := sourcev1.AddToScheme(scheme); err != nil {
-		return ctx, fmt.Errorf("failed to register source-controller scheme: %w", err)
-	}
-	return ctx, nil
 }
 
 func registerAccessRequestScheme(ctx context.Context, cfg *envconf.Config) (context.Context, error) {
