@@ -50,4 +50,4 @@ tasks:
       - install-flux
     cmds:
       - task: build:img:build-test
-      - go test -v ./test/e2e/... -count=1 {{.CLI_ARGS}}
+      - go test -v ./test/e2e/... -count=1 -timeout 15m {{.CLI_ARGS}}

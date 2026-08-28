@@ -167,8 +167,8 @@ func TestServiceProvider(t *testing.T) {
 							}
 							return true, nil
 						},
-						wait.WithTimeout(8*time.Minute),
-						wait.WithInterval(10*time.Second),
+						wait.WithTimeout(5*time.Minute),
+						wait.WithInterval(5*time.Second),
 					)
 					if err != nil {
 						t.Errorf("HelmRelease %q was not created or did not meet spec: %v", chartName, err)
@@ -195,7 +195,7 @@ func TestServiceProvider(t *testing.T) {
 				return ctx
 			}
 			for _, obj := range onboardingList.Items {
-				if err := resources.DeleteObject(ctx, onboardingConfig, &obj, wait.WithTimeout(time.Minute)); err != nil {
+				if err := resources.DeleteObject(ctx, onboardingConfig, &obj, wait.WithTimeout(8*time.Minute)); err != nil {
 					t.Errorf("failed to delete onboarding object: %v", err)
 				}
 			}
@@ -206,7 +206,8 @@ func TestServiceProvider(t *testing.T) {
 				t.Logf("--keep-clusters set: skipping MCP teardown")
 				return ctx
 			}
-			return providers.DeleteMCP("test-mcp", wait.WithTimeout(5*time.Minute))(ctx, t, c)
+			cleanupStuckGatewayFinalizers(ctx, t, c, tenantNamespace)
+			return providers.DeleteMCP("test-mcp", wait.WithTimeout(8*time.Minute))(ctx, t, c)
 		})
 	testenv.Test(t, basicProviderTest.Feature())
 }

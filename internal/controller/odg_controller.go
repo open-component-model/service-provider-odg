@@ -202,15 +202,21 @@ func (r *ODGReconciler) Delete(ctx context.Context, obj *apiv1alpha1.ODG, provid
 		)
 	}
 
-	objectsStillExist := false
+	platformObjectsExist := false
 	for _, managedObj := range objects {
 		if err := r.PlatformCluster.Client().Delete(ctx, managedObj); client.IgnoreNotFound(err) != nil {
 			serviceprovider.StatusTerminatingWithReason(obj, conditionReasonError, err.Error())
 			return ctrl.Result{}, fmt.Errorf("delete object failed: %w", err)
 		}
 		if err := r.PlatformCluster.Client().Get(ctx, client.ObjectKeyFromObject(managedObj), managedObj); !apierrors.IsNotFound(err) {
-			objectsStillExist = true
+			platformObjectsExist = true
 		}
+	}
+
+	if platformObjectsExist {
+		return ctrl.Result{
+			RequeueAfter: time.Second * 5,
+		}, nil
 	}
 
 	if clusters.WorkloadCluster != nil {
@@ -221,14 +227,10 @@ func (r *ODGReconciler) Delete(ctx context.Context, obj *apiv1alpha1.ODG, provid
 			return ctrl.Result{}, fmt.Errorf("failed to delete odg namespace %q: %w", odgNamespace, err)
 		}
 		if err := clusters.WorkloadCluster.Client().Get(ctx, client.ObjectKey{Name: odgNamespace}, ns); !apierrors.IsNotFound(err) {
-			objectsStillExist = true
+			return ctrl.Result{
+				RequeueAfter: time.Second * 5,
+			}, nil
 		}
-	}
-
-	if objectsStillExist {
-		return ctrl.Result{
-			RequeueAfter: time.Second * 10,
-		}, nil
 	}
 
 	obj.Status.Resources = nil
@@ -446,8 +448,9 @@ func (r *ODGReconciler) createHelmRelease(ctx context.Context, name, tenantNames
 			Install: &helmv2.Install{
 				CRDs:            helmv2.Create,
 				CreateNamespace: true,
+				Timeout:         &metav1.Duration{Duration: 2 * time.Minute},
 				Remediation: &helmv2.InstallRemediation{
-					Retries: 3,
+					Retries: 1,
 				},
 			},
 			Upgrade: &helmv2.Upgrade{
