@@ -388,7 +388,7 @@ func main() {
 			},
 		},
 	}
-	workloadClusterRequest := advanced.NewClusterRequest("workload", "wl", advanced.StaticClusterRequestSpecGenerator(&clustersv1alpha1.ClusterRequestSpec{
+	workloadClusterRequest := advanced.NewClusterRequest("workload", "wl-odg", advanced.StaticClusterRequestSpecGenerator(&clustersv1alpha1.ClusterRequestSpec{
 		Purpose: PurposeWorkloadODG,
 	})).
 		WithNamespaceGenerator(advanced.DefaultNamespaceGeneratorForMCP).

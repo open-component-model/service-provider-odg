@@ -25,9 +25,9 @@ func getTenantNamespace(mcpName, mcpNamespace string) (string, error) {
 func getWorkloadClusterClient(ctx context.Context, platformCfg *envconf.Config, tenantNamespace, mcpName string) (*rest.Config, error) {
 	// AccessRequest naming follows the pattern used in the controller:
 	// stableRequestNameFromLocalName(providerName, objectName) + requestSuffixWorkload
-	// where providerName = "odg" and requestSuffixWorkload = "--wl"
+	// where providerName = "odg" and requestSuffixWorkload = "--wl-odg"
 	// The stable naming includes the full group name
-	accessRequestName := fmt.Sprintf("odg.services.open-control-plane.io--%s--wl", mcpName)
+	accessRequestName := fmt.Sprintf("odg.services.open-control-plane.io--%s--wl-odg", mcpName)
 
 	accessRequest := &clustersv1alpha1.AccessRequest{}
 	err := platformCfg.Client().Resources().Get(ctx, accessRequestName, tenantNamespace, accessRequest)

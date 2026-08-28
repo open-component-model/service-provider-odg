@@ -68,7 +68,8 @@ const (
 	OdgSystemNamespacePrefix = "odg-system-"
 
 	// requestSuffixWorkload is the suffix used for the access request of the workload cluster.
-	requestSuffixWorkload = "--wl"
+	// Must match the local name passed to advanced.NewClusterRequest in main.go ("wl-odg").
+	requestSuffixWorkload = "--wl-odg"
 
 	// ociRepositoryKind and helmReleaseKind are used for status resource entries.
 	ociRepositoryKind = "OCIRepository"
