@@ -17,6 +17,75 @@ When an `ODG` resource is created on the onboarding cluster, the controller:
 5. Creates a Flux `HelmRelease` per chart that deploys it into `odg-system` on the ODG workload cluster via a kubeconfig reference
 6. Deletes any resources of chart which are now longer advertised in the `ProviderConfig` from the tenant namespace
 
+```mermaid
+flowchart TB
+  subgraph Platform["Platform"]
+    SP["ServiceProvider\n- ServiceProvider ODG Image Location"]
+    PCODG["Provider Config ODG\n-ODG Helm Charts\n- Image Locations\n- Helm Values"]
+
+    subgraph openmcp["openmcp-system"]
+      OpenMCP["OpenMCP Operator"]
+      SPODG["ServiceProvider ODG"]
+      IPS1["ImagePullSecret"]
+
+      OpenMCP -->|manages| SPODG
+      SPODG -->|uses| IPS1
+    end
+
+    subgraph MCP["mcp-&lt;uuid&gt;*"]
+      ARWODG["AccessRequest Workload-ODG"]
+      KWODG["Kubeconfig Workload-ODG"]
+      HVS["Helm Values Secrets"]
+      FluxHR["Flux HelmReleases\n- Installation/Upgrade Configuration"]
+      FluxOCI["Flux OCIRepositories\n- Helm Chart Location\n- ODG Version"]
+      IPS2["ImagePullSecret"]
+
+      ARWODG --> KWODG
+      FluxHR -->|references| KWODG
+      FluxHR -->|references| FluxOCI
+      FluxHR -->|references| HVS
+      FluxOCI -->|references| IPS2
+    end
+
+    subgraph fluxns["flux-system"]
+      FluxCtrl["Flux Controller"]
+    end
+
+    FluxCtrl -->|reconciles| FluxHR
+    OpenMCP -->|reconciles| SP
+    SPODG -->|uses| PCODG
+    SPODG -->|manages| IPS2
+    SPODG -->|manages| FluxOCI
+    SPODG -->|manages| HVS
+    SPODG -->|manages| FluxHR
+  end
+
+  subgraph Onboarding["Onboarding"]
+    subgraph projns["project-&lt;project-name&gt;--ws-&lt;workspace-name&gt;"]
+      SPAODG["ServiceProviderAPI ODG"]
+      ODGCFG["ODG Configuration"]
+      ODGSec["ODG Secrets"]
+
+      SPAODG -->|"references"| ODGCFG
+      SPAODG -->|"references"| ODGSec
+    end
+  end
+
+  subgraph WorkloadODG["Workload-ODG (multiple)"]
+    ODGCRDs["ODG CRDs"]
+
+    subgraph odgsys["odg-system"]
+      IPS3["ImagePullSecret"]
+      ODGComp["ODG Components\n- ODG Configuration\n- ODG Secrets"]
+    end
+  end
+
+  SPODG -->|reconciles| SPAODG
+  SPODG -->|manages| IPS3
+  FluxCtrl -->|manages| ODGCRDs
+  FluxCtrl -->|manages| ODGComp
+```
+
 ## API Reference
 
 ### ODG
