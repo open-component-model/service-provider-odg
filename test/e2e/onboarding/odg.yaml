@@ -3,4 +3,60 @@ kind: ODG
 metadata:
   name: test-mcp
 spec:
-  foo: bar
+  configurationRef:
+    name: test-mcp-odg-config
+  secretsRef:
+    name: test-mcp-odg-secrets
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test-mcp-odg-config
+data:
+  values.yaml: |
+    extensions_cfg:
+      artefact_enumerator:
+        components:
+          - component_name: ocm.software/open-delivery-gear
+    findings:
+      - type: finding/vulnerability
+        sprint_assignment_offset: -1
+        categorisations:
+          cfg_name: gardener
+          ref:
+            path: odg/defaults.yaml
+        rescoring_ruleset:
+          cfg_name: gardener
+          ref:
+            path: odg/defaults.yaml
+        filter:
+          - semantics: include
+            artefact_kind: resource
+    ocm_repo_mappings:
+      - repository: europe-docker.pkg.dev/gardener-project/releases
+    features_cfg:
+      specialComponents:
+        - id: c33230c0-3c3e-4cce-9b89-99df93878948
+          name: ocm.software/open-delivery-gear
+          displayName: Open Delivery Gear
+          type: ODG
+          version: greatest
+          icon: home
+      sprints:
+        sprint_name_pattern: '%y%S%C'
+    profiles:
+      - name: default
+        finding_types: []
+        special_component_ids:
+          - c33230c0-3c3e-4cce-9b89-99df93878948
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: test-mcp-odg-secrets
+stringData:
+  values.yaml: |
+    secrets:
+      delivery-db:
+        local:
+          username: postgres

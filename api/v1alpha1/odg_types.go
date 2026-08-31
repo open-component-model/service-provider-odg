@@ -30,14 +30,15 @@ const DefaultReleaseName = "odg"
 
 // ODGSpec defines the desired state of ODG
 type ODGSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-	// The following markers will use OpenAPI v3 schema to validate the value
-	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
-
-	// foo is an example field of ODG. Edit odg_types.go to remove/update
+	// ConfigurationRef references a ConfigMap in the same namespace whose data
+	// is merged into the Helm values for the bootstrapping chart.
 	// +optional
-	Foo *string `json:"foo,omitempty"`
+	ConfigurationRef *corev1.LocalObjectReference `json:"configurationRef,omitempty"`
+
+	// SecretsRef references a Secret in the same namespace whose data
+	// is merged into the Helm values for the bootstrapping chart (on top of ConfigurationRef).
+	// +optional
+	SecretsRef *corev1.LocalObjectReference `json:"secretsRef,omitempty"`
 }
 
 // InstancePhase is a custom type representing the phase of a service instance.

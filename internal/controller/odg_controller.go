@@ -17,8 +17,8 @@ limitations under the License.
 package controller
 
 import (
-	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -36,9 +36,9 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	sigsyaml "sigs.k8s.io/yaml"
 
 	"github.com/openmcp-project/controller-utils/pkg/clusters"
-	"github.com/openmcp-project/controller-utils/pkg/controller"
 	clusteraccess "github.com/openmcp-project/opencontrolplane-runtime/pkg/serviceprovider/clusteraccess"
 	"github.com/openmcp-project/openmcp-operator/lib/clusteraccess/advanced"
 
@@ -65,11 +65,14 @@ const (
 	conditionReasonError = "ReconcileError"
 
 	// OdgSystemNamespacePrefix is the namespace prefix on the target cluster to deploy ODG components into.
-	OdgSystemNamespacePrefix = "odg-system-"
+	OdgSystemNamespacePrefix = "odg-system"
 
 	// requestSuffixWorkload is the suffix used for the access request of the workload cluster.
 	// Must match the local name passed to advanced.NewClusterRequest in main.go ("wl-odg").
 	requestSuffixWorkload = "--wl-odg"
+
+	// helmValuesSuffix is the suffix used for the name of the secrets containing the Helm values
+	helmValuesSuffix = "-values"
 
 	// ociRepositoryKind and helmReleaseKind are used for status resource entries.
 	ociRepositoryKind = "OCIRepository"
@@ -146,7 +149,21 @@ func (r *ODGReconciler) reconcileChart(ctx context.Context, svcobj *apiv1alpha1.
 		return nil, fmt.Errorf("failed to replicate workload cluster image pull secrets: %w", err)
 	}
 
-	helmRel, err := r.createOrUpdateHelmRelease(ctx, chart.ChartName, tenantNamespace, odgNamespace, svcobj, chart.HelmValues)
+	helmValues := chart.HelmValues
+	if chart.ChartName == "bootstrapping" {
+		var err error
+		helmValues, err = r.mergeODGConfiguration(ctx, helmValues, svcobj)
+		if err != nil {
+			return nil, fmt.Errorf("failed to merge ODG configuration into helm values: %w", err)
+		}
+	}
+
+	valuesSecretName := chart.ChartName + helmValuesSuffix
+	if err := r.createOrUpdateValuesSecret(ctx, valuesSecretName, tenantNamespace, helmValues); err != nil {
+		return nil, fmt.Errorf("failed to write helm values secret: %w", err)
+	}
+
+	helmRel, err := r.createOrUpdateHelmRelease(ctx, chart.ChartName, tenantNamespace, odgNamespace, valuesSecretName, svcobj)
 	if err != nil {
 		return nil, fmt.Errorf("failed to reconcile HelmRelease: %w", err)
 	}
@@ -164,6 +181,15 @@ func (r *ODGReconciler) reconcileChart(ctx context.Context, svcobj *apiv1alpha1.
 			},
 			Phase:    ociPhase,
 			Message:  ociMsg,
+			Location: apiv1alpha1.PlatformCluster,
+		},
+		{
+			TypedObjectReference: corev1.TypedObjectReference{
+				Kind:      "Secret",
+				Name:      valuesSecretName,
+				Namespace: &tenantNamespace,
+			},
+			Phase:    apiv1alpha1.Ready,
 			Location: apiv1alpha1.PlatformCluster,
 		},
 		{
@@ -195,6 +221,9 @@ func (r *ODGReconciler) Delete(ctx context.Context, obj *apiv1alpha1.ODG, provid
 		objects = append(objects,
 			&sourcev1.OCIRepository{
 				ObjectMeta: metav1.ObjectMeta{Name: chart.ChartName, Namespace: tenantNamespace},
+			},
+			&corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: chart.ChartName + helmValuesSuffix, Namespace: tenantNamespace},
 			},
 			&helmv2.HelmRelease{
 				ObjectMeta: metav1.ObjectMeta{Name: chart.ChartName, Namespace: tenantNamespace},
@@ -397,8 +426,24 @@ func (r *ODGReconciler) replicateWorkloadImagePullSecrets(ctx context.Context, w
 	return nil
 }
 
-func (r *ODGReconciler) createOrUpdateHelmRelease(ctx context.Context, name, tenantNamespace, odgNamespace string, svcobj *apiv1alpha1.ODG, values *apiextensionsv1.JSON) (*helmv2.HelmRelease, error) {
-	helmRelease, err := r.createHelmRelease(ctx, name, tenantNamespace, odgNamespace, svcobj, values)
+func (r *ODGReconciler) createOrUpdateValuesSecret(ctx context.Context, name, namespace string, values *apiextensionsv1.JSON) error {
+	var raw []byte
+	if values != nil {
+		raw = values.Raw
+	}
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+	}
+	_, err := ctrl.CreateOrUpdate(ctx, r.PlatformCluster.Client(), secret, func() error {
+		secret.Labels = map[string]string{managedByLabel: managedByLabelValue}
+		secret.Data = map[string][]byte{"values.yaml": raw}
+		return nil
+	})
+	return err
+}
+
+func (r *ODGReconciler) createOrUpdateHelmRelease(ctx context.Context, name, tenantNamespace, odgNamespace, valuesSecretName string, svcobj *apiv1alpha1.ODG) (*helmv2.HelmRelease, error) {
+	helmRelease, err := r.createHelmRelease(ctx, name, tenantNamespace, odgNamespace, valuesSecretName, svcobj)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create helm release: %w", err)
 	}
@@ -421,14 +466,7 @@ func (r *ODGReconciler) createOrUpdateHelmRelease(ctx context.Context, name, ten
 	return managedObj, nil
 }
 
-func (r *ODGReconciler) createHelmRelease(ctx context.Context, name, tenantNamespace, odgNamespace string, svcobj *apiv1alpha1.ODG, helmValues *apiextensionsv1.JSON) (*helmv2.HelmRelease, error) {
-	if helmValues != nil {
-		// TODO patch in the values more elaborately
-		helmValues = &apiextensionsv1.JSON{
-			Raw: bytes.ReplaceAll(helmValues.Raw, []byte("odg-system"), []byte(odgNamespace)),
-		}
-	}
-
+func (r *ODGReconciler) createHelmRelease(ctx context.Context, name, tenantNamespace, odgNamespace, valuesSecretName string, svcobj *apiv1alpha1.ODG) (*helmv2.HelmRelease, error) {
 	fluxConfigRef, err := r.getWorkloadFluxConfig(ctx, tenantNamespace, svcobj.Name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get FluxConfig: %w", err)
@@ -466,7 +504,10 @@ func (r *ODGReconciler) createHelmRelease(ctx context.Context, name, tenantNames
 				Name:      name,
 				Namespace: tenantNamespace,
 			},
-			Values: helmValues,
+			ValuesFrom: []helmv2.ValuesReference{{
+				Kind: "Secret",
+				Name: valuesSecretName,
+			}},
 			KubeConfig: &meta.KubeConfigReference{
 				SecretRef: fluxConfigRef,
 			},
@@ -536,6 +577,15 @@ func managedResources(tenantNamespace string, charts []apiv1alpha1.ODGChart, pha
 			},
 			apiv1alpha1.ManagedResource{
 				TypedObjectReference: corev1.TypedObjectReference{
+					Kind:      "Secret",
+					Name:      chart.ChartName + helmValuesSuffix,
+					Namespace: stringPtr(tenantNamespace),
+				},
+				Phase:    phase,
+				Location: apiv1alpha1.PlatformCluster,
+			},
+			apiv1alpha1.ManagedResource{
+				TypedObjectReference: corev1.TypedObjectReference{
 					APIGroup:  stringPtr(helmv2.GroupVersion.Group),
 					Kind:      helmReleaseKind,
 					Name:      chart.ChartName,
@@ -581,8 +631,8 @@ func (r *ODGReconciler) deleteRemovedCharts(ctx context.Context, tenantNamespace
 	}
 	for i := range hrList.Items {
 		if !desired[hrList.Items[i].Name] {
-			if err := r.PlatformCluster.Client().Delete(ctx, &hrList.Items[i]); client.IgnoreNotFound(err) != nil {
-				return fmt.Errorf("failed to delete HelmRelease %q: %w", hrList.Items[i].Name, err)
+			if err := r.deleteRemovedChart(ctx, tenantNamespace, hrList.Items[i].Name); err != nil {
+				return err
 			}
 		}
 	}
@@ -590,10 +640,119 @@ func (r *ODGReconciler) deleteRemovedCharts(ctx context.Context, tenantNamespace
 	return nil
 }
 
+func (r *ODGReconciler) deleteRemovedChart(ctx context.Context, tenantNamespace, chartName string) error {
+	hr := &helmv2.HelmRelease{ObjectMeta: metav1.ObjectMeta{Name: chartName, Namespace: tenantNamespace}}
+	if err := r.PlatformCluster.Client().Delete(ctx, hr); client.IgnoreNotFound(err) != nil {
+		return fmt.Errorf("failed to delete HelmRelease %q: %w", chartName, err)
+	}
+	secretName := chartName + helmValuesSuffix
+	secret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: tenantNamespace}}
+	if err := r.PlatformCluster.Client().Delete(ctx, secret); client.IgnoreNotFound(err) != nil {
+		return fmt.Errorf("failed to delete values secret %q: %w", secretName, err)
+	}
+	return nil
+}
+
 // StableODGNamespace computes the namespace on the workload cluster that belongs to the given ODG.
 // onboardingName and onboardingNamespace are name and namespace of the ODG resource on the onboarding cluster.
 func StableODGNamespace(onboardingNamespace, onboardingName string) string {
-	res := controller.NameHashSHAKE128Base32(onboardingNamespace, onboardingName)
+	// Use a tenant agnostic namespace for now (assume each ODG runs in a dedicated cluster)
+	// res := controller.NameHashSHAKE128Base32(onboardingNamespace, onboardingName)
+	return OdgSystemNamespacePrefix
+}
 
-	return OdgSystemNamespacePrefix + res
+// mergeODGConfiguration fetches the ConfigMap and Secret referenced in the ODG spec,
+// parses the "values.yaml" key from each as JSON, and merges them (Secret on top) into base.
+func (r *ODGReconciler) mergeODGConfiguration(ctx context.Context, base *apiextensionsv1.JSON, svcobj *apiv1alpha1.ODG) (*apiextensionsv1.JSON, error) {
+	result := base
+
+	if ref := svcobj.Spec.ConfigurationRef; ref != nil {
+		cm := &corev1.ConfigMap{}
+		if err := r.OnboardingCluster.Client().Get(ctx, client.ObjectKey{Name: ref.Name, Namespace: svcobj.Namespace}, cm); err != nil {
+			return nil, fmt.Errorf("failed to get ConfigMap %q: %w", ref.Name, err)
+		}
+		overlay, err := dataToJSON([]byte(cm.Data["values.yaml"]))
+		if err != nil {
+			return nil, fmt.Errorf("ConfigMap %q values.yaml: %w", ref.Name, err)
+		}
+		if result, err = mergeHelmValues(result, overlay); err != nil {
+			return nil, err
+		}
+	}
+
+	if ref := svcobj.Spec.SecretsRef; ref != nil {
+		secret := &corev1.Secret{}
+		if err := r.OnboardingCluster.Client().Get(ctx, client.ObjectKey{Name: ref.Name, Namespace: svcobj.Namespace}, secret); err != nil {
+			return nil, fmt.Errorf("failed to get Secret %q: %w", ref.Name, err)
+		}
+		overlay, err := dataToJSON(secret.Data["values.yaml"])
+		if err != nil {
+			return nil, fmt.Errorf("secret %q values.yaml: %w", ref.Name, err)
+		}
+		if result, err = mergeHelmValues(result, overlay); err != nil {
+			return nil, err
+		}
+	}
+
+	return result, nil
+}
+
+// dataToJSON converts raw YAML or JSON bytes to canonical JSON for merging.
+// Returns nil (not an error) when data is empty.
+func dataToJSON(data []byte) (*apiextensionsv1.JSON, error) {
+	if len(data) == 0 {
+		return nil, nil
+	}
+	jsonBytes, err := sigsyaml.YAMLToJSON(data)
+	if err != nil {
+		return nil, fmt.Errorf("yaml to json: %w", err)
+	}
+	return &apiextensionsv1.JSON{Raw: jsonBytes}, nil
+}
+
+// mergeHelmValues performs a deep JSON merge of overlay on top of base.
+// Map values are merged recursively; all other types are overwritten by the overlay.
+// Returns nil when both inputs are nil.
+func mergeHelmValues(base, overlay *apiextensionsv1.JSON) (*apiextensionsv1.JSON, error) {
+	if overlay == nil {
+		return base, nil
+	}
+	if base == nil {
+		return overlay, nil
+	}
+
+	var baseMap, overlayMap map[string]any
+	if err := json.Unmarshal(base.Raw, &baseMap); err != nil {
+		return nil, fmt.Errorf("unmarshal base helm values: %w", err)
+	}
+	if err := json.Unmarshal(overlay.Raw, &overlayMap); err != nil {
+		return nil, fmt.Errorf("unmarshal overlay helm values: %w", err)
+	}
+
+	deepMerge(baseMap, overlayMap)
+
+	raw, err := json.Marshal(baseMap)
+	if err != nil {
+		return nil, fmt.Errorf("marshal merged helm values: %w", err)
+	}
+	return &apiextensionsv1.JSON{Raw: raw}, nil
+}
+
+// deepMerge merges src into dst in place. Nested maps are merged recursively;
+// any other type in src overwrites the value in dst.
+func deepMerge(dst, src map[string]any) {
+	for k, srcVal := range src {
+		dstVal, exists := dst[k]
+		if !exists {
+			dst[k] = srcVal
+			continue
+		}
+		srcMap, srcIsMap := srcVal.(map[string]any)
+		dstMap, dstIsMap := dstVal.(map[string]any)
+		if srcIsMap && dstIsMap {
+			deepMerge(dstMap, srcMap)
+		} else {
+			dst[k] = srcVal
+		}
+	}
 }

@@ -8,7 +8,20 @@ spec:
       chartPullSecretName: privateregcred
       chartURL: europe-docker.pkg.dev/gardener-project/releases/charts/odg/bootstrapping
       chartVersion: 0.1369.0
-      helmValues: {}
+      helmValues:
+        extensions_cfg:
+          defaults:
+            delivery_service_url: http://delivery-service.odg-system.svc.cluster.local:8080
+          access_manager:
+            enabled: true
+          artefact_enumerator:
+            enabled: true
+          backlog_controller:
+            enabled: true
+          cache_manager:
+            enabled: true
+          responsibles:
+            enabled: true
     - chartName: delivery-dashboard
       chartPullSecretName: privateregcred
       chartURL: oci://europe-docker.pkg.dev/gardener-project/releases/charts/odg/delivery-dashboard

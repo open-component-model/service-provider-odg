@@ -296,6 +296,11 @@ func main() {
 					Resources: []string{"*"},
 					Verbs:     []string{"*"},
 				},
+				{
+					APIGroups: []string{""},
+					Resources: []string{"configmaps", "secrets"},
+					Verbs:     []string{"get"},
+				},
 			},
 		},
 	}
