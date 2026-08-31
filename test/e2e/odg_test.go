@@ -140,9 +140,10 @@ func TestServiceProvider(t *testing.T) {
 		).
 		Assess("verify HelmReleases are created correctly",
 			func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
-				readyCharts := map[string]bool{
-					"bootstrapping":      true,
-					"delivery-dashboard": true,
+				// notReadyCharts lists charts that are not expected to become Ready in the test
+				// environment. Newly added charts are expected to become Ready by default.
+				notReadyCharts := map[string]bool{
+					"delivery-service": true,
 				}
 				for _, chartName := range chartNames {
 					helmRelease := &helmv2.HelmRelease{}
@@ -161,10 +162,10 @@ func TestServiceProvider(t *testing.T) {
 							if helmRelease.Spec.KubeConfig == nil {
 								return false, nil
 							}
-							if readyCharts[chartName] {
-								return apimeta.IsStatusConditionTrue(helmRelease.Status.Conditions, "Ready"), nil
+							if notReadyCharts[chartName] {
+								return true, nil
 							}
-							return true, nil
+							return apimeta.IsStatusConditionTrue(helmRelease.Status.Conditions, "Ready"), nil
 						},
 						wait.WithTimeout(5*time.Minute),
 						wait.WithInterval(5*time.Second),
@@ -173,10 +174,10 @@ func TestServiceProvider(t *testing.T) {
 						t.Errorf("HelmRelease %q was not created or did not meet spec: %v", chartName, err)
 						continue
 					}
-					if readyCharts[chartName] {
-						t.Logf("HelmRelease %q is Ready", chartName)
-					} else {
+					if notReadyCharts[chartName] {
 						t.Logf("HelmRelease %q validated (spec verified, Ready check skipped - requires runtime config)", chartName)
+					} else {
+						t.Logf("HelmRelease %q is Ready", chartName)
 					}
 				}
 				return ctx

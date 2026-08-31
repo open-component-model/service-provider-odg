@@ -66,10 +66,6 @@ import (
 	// +kubebuilder:scaffold:imports
 )
 
-const (
-	PurposeWorkloadODG = "workload-odg"
-)
-
 var (
 	platformScheme   = runtime.NewScheme()
 	onboardingScheme = runtime.NewScheme()
@@ -112,6 +108,9 @@ func initWorkloadScheme() {
 }
 
 const (
+	// PurposeWorkloadODG is the scheduler purpose for dedicated ODG workload clusters.
+	PurposeWorkloadODG = "workload-odg"
+
 	debugEnvVar = "DEV_DEBUG"
 )
 
