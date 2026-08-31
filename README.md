@@ -29,7 +29,7 @@ flowchart TB
       IPS1["ImagePullSecret"]
 
       OpenMCP -->|manages| SPODG
-      SPODG -->|uses| IPS1
+      IPS1 -->|used by| SPODG
     end
 
     subgraph MCP["mcp-&lt;uuid&gt;*"]
@@ -41,19 +41,19 @@ flowchart TB
       IPS2["ImagePullSecret"]
 
       ARWODG --> KWODG
-      FluxHR -->|references| KWODG
-      FluxHR -->|references| FluxOCI
-      FluxHR -->|references| HVS
-      FluxOCI -->|references| IPS2
+      KWODG -->|referenced by| FluxHR
+      FluxOCI -->|referenced by| FluxHR
+      HVS -->|referenced by| FluxHR
+      IPS2 -->|referenced by| FluxOCI
     end
 
     subgraph fluxns["flux-system"]
       FluxCtrl["Flux Controller"]
     end
 
-    FluxCtrl -->|reconciles| FluxHR
-    OpenMCP -->|reconciles| SP
-    SPODG -->|uses| PCODG
+    FluxHR -->|reconciled by| FluxCtrl
+    SP -->|reconciled by| OpenMCP
+    PCODG -->|used by| SPODG
     SPODG -->|manages| IPS2
     SPODG -->|manages| FluxOCI
     SPODG -->|manages| HVS
@@ -66,8 +66,8 @@ flowchart TB
       ODGCFG["ODG Configuration"]
       ODGSec["ODG Secrets"]
 
-      SPAODG -->|"references"| ODGCFG
-      SPAODG -->|"references"| ODGSec
+      ODGCFG -->|"referenced by"| SPAODG
+      ODGSec -->|"referenced by"| SPAODG
     end
   end
 
@@ -80,7 +80,7 @@ flowchart TB
     end
   end
 
-  SPODG -->|reconciles| SPAODG
+  SPAODG -->|reconciled by| SPODG
   SPODG -->|manages| IPS3
   FluxCtrl -->|manages| ODGCRDs
   FluxCtrl -->|manages| ODGComp
