@@ -6,7 +6,7 @@ spec:
   charts:
     - chartName: bootstrapping
       chartPullSecretName: privateregcred
-      chartURL: europe.docker.pkg-dev/gardener-project/releases/charts/odg/bootstrapping
+      chartURL: europe-docker.pkg.dev/gardener-project/releases/charts/odg/bootstrapping
       chartVersion: 0.1369.0
       helmValues: {}
     - chartName: delivery-dashboard
