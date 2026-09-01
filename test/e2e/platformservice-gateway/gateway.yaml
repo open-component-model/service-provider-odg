@@ -12,11 +12,15 @@ spec:
       url: "oci://ghcr.io/openmcp-project/components/github.com/openmcp-project/openmcp/charts/envoy-gateway"
       tag: "1.5.4"
 
+  # Only workload-odg is required for the e2e test: the ODG charts contain HTTPRoute
+  # resources and need the Gateway API CRDs on the workload-odg cluster. The e2e env
+  # has no cluster with purpose "workload", and nothing routes traffic through a
+  # gateway on the platform cluster.
   clusters:
-    - selector:
-        matchPurpose: platform
-    - selector:
-        matchPurpose: workload
+    # - selector:
+    #     matchPurpose: platform
+    # - selector:
+    #     matchPurpose: workload
     - selector:
         matchPurpose: workload-odg
   dns:
