@@ -126,16 +126,9 @@ The test framework (`main_test.go`) configures:
 
 - **`workload-odg` purpose mapping** — the scheduler doesn't know this purpose yet, so it's added via `ExtraClusterPurposeMapping` (kind, Exclusive)
 - **FluxCD extension** — installs Flux on the platform cluster during Bootstrap (before platform services), so the SP controller can create OCIRepository/HelmRelease resources
-- **Platform service gateway** — installs Envoy Gateway (including Gateway API CRDs) on `workload-odg` clusters via a `GatewayServiceConfig` with `matchPurpose: workload-odg`. Required because the ODG Helm charts include `HTTPRoute` resources
+- **Workload service gateway** — installs Envoy Gateway (including Gateway API CRDs) on `workload-odg` clusters via a `GatewayServiceConfig` with `matchPurpose: workload-odg`. Required because the ODG Helm charts include `HTTPRoute` resources
 - **Dummy pull secret** — creates a `privateregcred` secret in the SP pod namespace to test the controller's secret replication code path
 
-### Once `workload-odg` is upstreamed
-
-When the `workload-odg` purpose is added to the ocp main libraries (ocpctl default ConfigMap, platform-service-gateway defaults), the test setup will be simpler:
-
-- `ExtraClusterPurposeMapping` for `workload-odg` in `main_test.go` can be removed (ocpctl will include it by default)
-- `test/e2e/platformservice-gateway/gateway.yaml` can be removed (the default `GatewayServiceConfig` will include `matchPurpose: workload-odg`)
-- The FluxCD extension and the PlatformServices gateway entry will still be needed (they are test infrastructure, not purpose-mapping concerns)
 
 ## Quality Criteria
 
