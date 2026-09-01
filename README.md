@@ -20,6 +20,51 @@ When an `ODG` resource is created on the onboarding cluster, the controller:
 ```mermaid
 flowchart TB
   subgraph Platform["Platform"]
+    SP["ServiceProvider"]
+    PCODG["Provider Config ODG"]
+
+    subgraph openmcp["openmcp-system"]
+      OpenMCP["OpenMCP Operator"]
+      SPODG["ServiceProvider ODG"]
+
+      OpenMCP -->|manages| SPODG
+    end
+
+    subgraph MCP["mcp-&lt;uuid&gt;*"]
+      FluxHR["Flux HelmReleases"]
+    end
+
+    subgraph fluxns["flux-system"]
+      FluxCtrl["Flux Controller"]
+    end
+
+    SP -->|reconciled by| OpenMCP
+    PCODG -->|used by| SPODG
+    SPODG -->|manages| FluxHR
+    FluxHR -->|reconciled by| FluxCtrl
+  end
+
+  subgraph Onboarding["Onboarding"]
+    SPAODG["ServiceProviderAPI ODG"]
+    ODGCFG["ODG Configuration & Secrets"]
+
+    ODGCFG -->|referenced by| SPAODG
+  end
+
+  subgraph WorkloadODG["Workload-ODG (multiple)"]
+    ODGAll["ODG CRDs & Components"]
+  end
+
+  SPAODG -->|reconciled by| SPODG
+  FluxCtrl -->|manages| ODGAll
+```
+
+<details>
+<summary>Detailed Architecture</summary>
+
+```mermaid
+flowchart TB
+  subgraph Platform["Platform"]
     SP["ServiceProvider\n- ServiceProvider ODG Image Location"]
     PCODG["Provider Config ODG\n-ODG Helm Charts\n- Image Locations\n- Helm Values"]
 
@@ -85,6 +130,7 @@ flowchart TB
   FluxCtrl -->|manages| ODGCRDs
   FluxCtrl -->|manages| ODGComp
 ```
+</details>
 
 ## API Reference
 
