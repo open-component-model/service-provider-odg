@@ -12,8 +12,6 @@ spec:
         extensions_cfg:
           defaults:
             delivery_service_url: http://delivery-service.odg-system.svc.cluster.local:8080
-          access_manager:
-            enabled: true
           artefact_enumerator:
             enabled: true
           backlog_controller:
@@ -30,4 +28,44 @@ spec:
       chartPullSecretName: privateregcred
       chartURL: europe-docker.pkg.dev/gardener-project/releases/charts/odg/delivery-service
       chartVersion: 0.1369.0
+    - chartName: extensions
+      chartPullSecretName: privateregcred
+      chartURL: europe-docker.pkg.dev/gardener-project/releases/charts/odg/extensions
+      chartVersion: 0.1369.0
+      helmValues:
+        artefact-enumerator:
+          enabled: true
+        backlog-controller:
+          enabled: true
+        cache-manager:
+          enabled: true
+        responsibles:
+          enabled: true
+    - chartName: delivery-db
+      chartPullSecretName: privateregcred
+      chartURL: europe-docker.pkg.dev/gardener-project/releases/charts/ocm-gear/postgresql
+      chartVersion: 16.6.1
+      helmValues:
+        auth:
+          existingSecret: delivery-db-password
+        fullnameOverride: delivery-db
+        global:
+          security:
+            allowInsecureImages: true
+        image:
+          registry: ''
+          repository: europe-docker.pkg.dev/gardener-project/releases/ocm-gear/postgres
+          tag: 16.8.0
+        postgresqlDataDir: /data/pgdata
+        primary:
+          containerSecurityContext:
+            readOnlyRootFilesystem: false
+          extraEnvVars:
+            - name: POSTGRESQL_MAX_CONNECTIONS
+              value: '200'
+          resources:
+            requests:
+              memory: 256Mi
+          persistence:
+            mountPath: /data/
   pollInterval: 1m
