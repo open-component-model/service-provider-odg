@@ -98,12 +98,20 @@ type ODGStatus struct {
 	// Resources managed by this OCM instance.
 	// +optional
 	Resources []ManagedResource `json:"resources,omitempty"`
+	// DeliveryServiceURL is the externally reachable URL of the ODG delivery-service.
+	// +optional
+	DeliveryServiceURL string `json:"deliveryServiceURL,omitempty"`
+	// DeliveryDashboardURL is the externally reachable URL of the ODG delivery-dashboard.
+	// +optional
+	DeliveryDashboardURL string `json:"deliveryDashboardURL,omitempty"`
 }
 
 // ODG is the Schema for the odgs API
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:JSONPath=`.status.phase`,name="Phase",type=string
+// +kubebuilder:printcolumn:JSONPath=`.status.deliveryDashboardURL`,name="Dashboard",type=string,priority=1
+// +kubebuilder:printcolumn:JSONPath=`.status.deliveryServiceURL`,name="API",type=string,priority=1
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:metadata:labels="openmcp.cloud/cluster=onboarding"
 type ODG struct {

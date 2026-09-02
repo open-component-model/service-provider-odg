@@ -24,6 +24,7 @@ import (
 
 	helmv2 "github.com/fluxcd/helm-controller/api/v2"
 	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
+	commonapi "github.com/openmcp-project/openmcp-operator/api/common"
 	libutils "github.com/openmcp-project/openmcp-operator/lib/utils"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -126,11 +127,78 @@ func (r *ODGReconciler) CreateOrUpdate(ctx context.Context, svcobj *apiv1alpha1.
 	svcobj.Status.Resources = resources
 
 	if allReady {
+		if err := r.setURLs(ctx, svcobj, tenantNamespace); err != nil {
+			serviceprovider.StatusProgressing(svcobj, conditionReasonError, err.Error())
+			return ctrl.Result{}, err
+		}
 		serviceprovider.StatusReady(svcobj)
 	} else {
 		serviceprovider.StatusProgressing(svcobj, "Reconciling", "Waiting for managed resources to become ready")
 	}
 	return ctrl.Result{}, nil
+}
+
+// setURLs resolves the shoot DNS domain of the workload cluster to report the
+// delivery-service and delivery-dashboard URLs.
+func (r *ODGReconciler) setURLs(ctx context.Context, svcobj *apiv1alpha1.ODG, tenantNamespace string) error {
+	domain, err := r.workloadShootDomain(ctx, tenantNamespace, svcobj.Name)
+	if err != nil {
+		return err
+	}
+
+	svcobj.Status.DeliveryServiceURL = "https://delivery-service." + domain
+	svcobj.Status.DeliveryDashboardURL = "https://delivery-dashboard." + domain
+
+	return nil
+}
+
+// workloadShootDomain fetches the workload Cluster resource on the platform cluster and
+// returns .status.providerStatus.shoot.spec.dns.domain
+func (r *ODGReconciler) workloadShootDomain(ctx context.Context, tenantNamespace, objectName string) (string, error) {
+	clusterRef, err := r.workloadClusterRef(ctx, tenantNamespace, objectName)
+	if err != nil {
+		return "", err
+	}
+
+	cluster := &clustersv1alpha1.Cluster{}
+	if err := r.PlatformCluster.Client().Get(ctx, client.ObjectKey{Name: clusterRef.Name, Namespace: clusterRef.Namespace}, cluster); err != nil {
+		return "", fmt.Errorf("failed to get workload Cluster %q: %w", clusterRef.Name, err)
+	}
+	if cluster.Status.ProviderStatus == nil {
+		return "", fmt.Errorf("the Cluster providerStatus is empty")
+	}
+
+	var providerStatus struct {
+		Shoot struct {
+			Spec struct {
+				DNS struct {
+					Domain string `json:"domain"`
+				} `json:"dns"`
+			} `json:"spec"`
+		} `json:"shoot"`
+	}
+	if err := cluster.Status.GetProviderStatus(&providerStatus); err != nil {
+		return "", fmt.Errorf("failed to parse workload Cluster providerStatus: %w", err)
+	}
+	return providerStatus.Shoot.Spec.DNS.Domain, nil
+}
+
+// workloadClusterRef resolves the workload Cluster reference from the workload AccessRequest
+func (r *ODGReconciler) workloadClusterRef(ctx context.Context, tenantNamespace, objectName string) (*commonapi.ObjectReference, error) {
+	ar := &clustersv1alpha1.AccessRequest{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      stableRequestNameFromLocalName(r.ProviderName, objectName) + requestSuffixWorkload,
+			Namespace: tenantNamespace,
+		},
+	}
+	if err := r.PlatformCluster.Client().Get(ctx, client.ObjectKeyFromObject(ar), ar); err != nil {
+		return nil, fmt.Errorf("failed to get Workload AccessRequest: %w", err)
+	}
+
+	if ar.Spec.ClusterRef != nil {
+		return ar.Spec.ClusterRef, nil
+	}
+	return nil, fmt.Errorf("workload AccessRequest has no clusterRef")
 }
 
 func (r *ODGReconciler) reconcileChart(ctx context.Context, svcobj *apiv1alpha1.ODG, chart apiv1alpha1.ODGChart, tenantNamespace string, clusters clusteraccess.ClusterContext) ([]apiv1alpha1.ManagedResource, error) {

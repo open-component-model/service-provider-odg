@@ -20,6 +20,14 @@ spec:
     - jsonPath: .status.phase
       name: Phase
       type: string
+    - jsonPath: .status.deliveryDashboardURL
+      name: Dashboard
+      priority: 1
+      type: string
+    - jsonPath: .status.deliveryServiceURL
+      name: API
+      priority: 1
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -153,6 +161,14 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              deliveryDashboardURL:
+                description: DeliveryDashboardURL is the externally reachable URL
+                  of the ODG delivery-dashboard.
+                type: string
+              deliveryServiceURL:
+                description: DeliveryServiceURL is the externally reachable URL of
+                  the ODG delivery-service.
+                type: string
               observedGeneration:
                 description: ObservedGeneration is the generation of this resource
                   that was last reconciled by the controller.
