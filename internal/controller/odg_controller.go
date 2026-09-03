@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	helmv2 "github.com/fluxcd/helm-controller/api/v2"
@@ -100,11 +101,17 @@ func (r *ODGReconciler) CreateOrUpdate(ctx context.Context, svcobj *apiv1alpha1.
 		return ctrl.Result{}, err
 	}
 
+	domainSuffix, err := r.workloadShootDomainSuffix(ctx, tenantNamespace, svcobj.Name)
+	if err != nil {
+		serviceprovider.StatusProgressing(svcobj, conditionReasonError, err.Error())
+		return ctrl.Result{}, err
+	}
+
 	allReady := true
 	var resources []apiv1alpha1.ManagedResource
 
 	for _, chart := range providerConfig.Spec.Charts {
-		chartResources, err := r.reconcileChart(ctx, svcobj, chart, tenantNamespace, clusters)
+		chartResources, err := r.reconcileChart(ctx, svcobj, chart, tenantNamespace, domainSuffix, clusters)
 		if err != nil {
 			serviceprovider.StatusProgressing(svcobj, conditionReasonError, err.Error())
 			return ctrl.Result{}, err
@@ -127,10 +134,8 @@ func (r *ODGReconciler) CreateOrUpdate(ctx context.Context, svcobj *apiv1alpha1.
 	svcobj.Status.Resources = resources
 
 	if allReady {
-		if err := r.setURLs(ctx, svcobj, tenantNamespace); err != nil {
-			serviceprovider.StatusProgressing(svcobj, conditionReasonError, err.Error())
-			return ctrl.Result{}, err
-		}
+		svcobj.Status.DeliveryServiceURL = "https://delivery-service" + domainSuffix
+		svcobj.Status.DeliveryDashboardURL = "https://delivery-dashboard" + domainSuffix
 		serviceprovider.StatusReady(svcobj)
 	} else {
 		serviceprovider.StatusProgressing(svcobj, "Reconciling", "Waiting for managed resources to become ready")
@@ -138,23 +143,9 @@ func (r *ODGReconciler) CreateOrUpdate(ctx context.Context, svcobj *apiv1alpha1.
 	return ctrl.Result{}, nil
 }
 
-// setURLs resolves the shoot DNS domain of the workload cluster to report the
-// delivery-service and delivery-dashboard URLs.
-func (r *ODGReconciler) setURLs(ctx context.Context, svcobj *apiv1alpha1.ODG, tenantNamespace string) error {
-	domain, err := r.workloadShootDomain(ctx, tenantNamespace, svcobj.Name)
-	if err != nil {
-		return err
-	}
-
-	svcobj.Status.DeliveryServiceURL = "https://delivery-service." + domain
-	svcobj.Status.DeliveryDashboardURL = "https://delivery-dashboard." + domain
-
-	return nil
-}
-
-// workloadShootDomain fetches the workload Cluster resource on the platform cluster and
+// workloadShootDomainSuffix fetches the workload Cluster resource on the platform cluster and
 // returns .status.providerStatus.shoot.spec.dns.domain
-func (r *ODGReconciler) workloadShootDomain(ctx context.Context, tenantNamespace, objectName string) (string, error) {
+func (r *ODGReconciler) workloadShootDomainSuffix(ctx context.Context, tenantNamespace, objectName string) (string, error) {
 	clusterRef, err := r.workloadClusterRef(ctx, tenantNamespace, objectName)
 	if err != nil {
 		return "", err
@@ -180,7 +171,12 @@ func (r *ODGReconciler) workloadShootDomain(ctx context.Context, tenantNamespace
 	if err := cluster.Status.GetProviderStatus(&providerStatus); err != nil {
 		return "", fmt.Errorf("failed to parse workload Cluster providerStatus: %w", err)
 	}
-	return providerStatus.Shoot.Spec.DNS.Domain, nil
+
+	domain := providerStatus.Shoot.Spec.DNS.Domain
+	if domain == "" {
+		return "", nil
+	}
+	return "." + domain, nil
 }
 
 // workloadClusterRef resolves the workload Cluster reference from the workload AccessRequest
@@ -201,7 +197,7 @@ func (r *ODGReconciler) workloadClusterRef(ctx context.Context, tenantNamespace,
 	return nil, fmt.Errorf("workload AccessRequest has no clusterRef")
 }
 
-func (r *ODGReconciler) reconcileChart(ctx context.Context, svcobj *apiv1alpha1.ODG, chart apiv1alpha1.ODGChart, tenantNamespace string, clusters clusteraccess.ClusterContext) ([]apiv1alpha1.ManagedResource, error) {
+func (r *ODGReconciler) reconcileChart(ctx context.Context, svcobj *apiv1alpha1.ODG, chart apiv1alpha1.ODGChart, tenantNamespace, domainSuffix string, clusters clusteraccess.ClusterContext) ([]apiv1alpha1.ManagedResource, error) {
 	odgNamespace := StableODGNamespace(svcobj.Namespace, svcobj.Name)
 
 	if err := r.replicateChartPullSecret(ctx, chart.ChartPullSecretName, types.NamespacedName{Name: chart.ChartPullSecretName, Namespace: tenantNamespace}); err != nil {
@@ -224,6 +220,16 @@ func (r *ODGReconciler) reconcileChart(ctx context.Context, svcobj *apiv1alpha1.
 		if err != nil {
 			return nil, fmt.Errorf("failed to merge ODG configuration into helm values: %w", err)
 		}
+	}
+
+	if helmValues != nil {
+		// helmValues.Raw is JSON; encoding/json HTML-escapes < and > to literal \u003c/\u003e.
+		// Use raw string literals so Go does not re-interpret the backslash sequences.
+		raw := strings.NewReplacer(
+			`\u003cdelivery-dashboard-domain-placeholder\u003e`, "delivery-dashboard"+domainSuffix,
+			`\u003cdelivery-service-domain-placeholder\u003e`, "delivery-service"+domainSuffix,
+		).Replace(string(helmValues.Raw))
+		helmValues = &apiextensionsv1.JSON{Raw: []byte(raw)}
 	}
 
 	valuesSecretName := chart.ChartName + helmValuesSuffix
