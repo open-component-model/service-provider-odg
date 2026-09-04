@@ -7,7 +7,7 @@ spec:
     - chartName: bootstrapping
       chartPullSecretName: privateregcred
       chartURL: europe-docker.pkg.dev/gardener-project/releases/charts/odg/bootstrapping
-      chartVersion: 0.1369.0
+      chartVersion: 0.1371.0
       helmValues:
         extensions_cfg:
           defaults:
@@ -24,7 +24,7 @@ spec:
     - chartName: delivery-dashboard
       chartPullSecretName: privateregcred
       chartURL: oci://europe-docker.pkg.dev/gardener-project/releases/charts/odg/delivery-dashboard
-      chartVersion: 0.440.0
+      chartVersion: 0.441.0
       helmValues:
         envVars:
           REACT_APP_DELIVERY_SERVICE_API_URL: https://delivery-service<workload-shoot-domain-placeholder>
@@ -32,13 +32,20 @@ spec:
     - chartName: delivery-service
       chartPullSecretName: privateregcred
       chartURL: europe-docker.pkg.dev/gardener-project/releases/charts/odg/delivery-service
-      chartVersion: 0.1369.0
+      chartVersion: 0.1371.0
       helmValues:
         host: delivery-service<workload-shoot-domain-placeholder>
+        gateway:
+          annotations:
+            cert.gardener.cloud/dnsnames: '"*<workload-shoot-domain-placeholder>"'
+            cert.gardener.cloud/purpose: managed
+            dns.gardener.cloud/class: garden
+            dns.gardener.cloud/dnsnames: '"*"'
+          enabled: true
     - chartName: extensions
       chartPullSecretName: privateregcred
       chartURL: europe-docker.pkg.dev/gardener-project/releases/charts/odg/extensions
-      chartVersion: 0.1369.0
+      chartVersion: 0.1371.0
       helmValues:
         artefact-enumerator:
           enabled: true
