@@ -226,8 +226,7 @@ func (r *ODGReconciler) reconcileChart(ctx context.Context, svcobj *apiv1alpha1.
 		// helmValues.Raw is JSON; encoding/json HTML-escapes < and > to literal \u003c/\u003e.
 		// Use raw string literals so Go does not re-interpret the backslash sequences.
 		raw := strings.NewReplacer(
-			`\u003cdelivery-dashboard-domain-placeholder\u003e`, "delivery-dashboard"+domainSuffix,
-			`\u003cdelivery-service-domain-placeholder\u003e`, "delivery-service"+domainSuffix,
+			`\u003cworkload-shoot-domain-placeholder\u003e`, domainSuffix,
 		).Replace(string(helmValues.Raw))
 		helmValues = &apiextensionsv1.JSON{Raw: []byte(raw)}
 	}

@@ -11,7 +11,7 @@ spec:
       helmValues:
         extensions_cfg:
           defaults:
-            delivery_dashboard_url: https://<delivery-dashboard-domain-placeholder>
+            delivery_dashboard_url: https://delivery-dashboard<workload-shoot-domain-placeholder>
             delivery_service_url: http://delivery-service.odg-system.svc.cluster.local:8080
           artefact_enumerator:
             enabled: true
@@ -27,14 +27,14 @@ spec:
       chartVersion: 0.440.0
       helmValues:
         envVars:
-          REACT_APP_DELIVERY_SERVICE_API_URL: https://<delivery-service-domain-placeholder>
-        host: <delivery-dashboard-domain-placeholder>
+          REACT_APP_DELIVERY_SERVICE_API_URL: https://delivery-service<workload-shoot-domain-placeholder>
+        host: delivery-dashboard<workload-shoot-domain-placeholder>
     - chartName: delivery-service
       chartPullSecretName: privateregcred
       chartURL: europe-docker.pkg.dev/gardener-project/releases/charts/odg/delivery-service
       chartVersion: 0.1369.0
       helmValues:
-        host: <delivery-service-domain-placeholder>
+        host: delivery-service<workload-shoot-domain-placeholder>
     - chartName: extensions
       chartPullSecretName: privateregcred
       chartURL: europe-docker.pkg.dev/gardener-project/releases/charts/odg/extensions
