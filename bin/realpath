@@ -1,7 +1,0 @@
-#!/bin/bash
-# Wrapper to use GNU realpath on macOS where it's installed as grealpath
-if command -v grealpath >/dev/null 2>&1; then
-    exec grealpath "$@"
-else
-    exec /usr/bin/realpath "$@"
-fi

@@ -43,19 +43,19 @@ git submodule update --init --recursive
 
 ```bash
 # Generate code (deepcopy, CRDs, formatting)
-PATH="$PWD/bin:$PATH" task generate
+task generate
 
 # Run linters and validation
-PATH="$PWD/bin:$PATH" task validate
+task validate
 
 # Run unit tests
-PATH="$PWD/bin:$PATH" task test
+task test
 
 # Build container image for local platform
-PATH="$PWD/bin:$PATH" task build:img:build
+task build:img:build
 
 # Build image and run E2E tests
-PATH="$PWD/bin:$PATH" task test-e2e
+task test-e2e
 ```
 
 ## Development Workflow

@@ -226,13 +226,13 @@ The e2e tests spin up a full local OCP environment with four kind clusters (plat
 The e2e test doubles as a local cluster setup. With `--keep-clusters`, the test runs normally but skips teardown, leaving the clusters alive for debugging:
 
 ```shell
-PATH="$PWD/bin:$PATH" task test-e2e -- --keep-clusters
+task test-e2e -- --keep-clusters
 ```
 
 Without the flag, clusters are torn down after tests:
 
 ```shell
-PATH="$PWD/bin:$PATH" task test-e2e
+task test-e2e
 ```
 
 ### What the test environment sets up
