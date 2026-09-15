@@ -107,21 +107,10 @@ func (r *ODGReconciler) CreateOrUpdate(ctx context.Context, svcobj *apiv1alpha1.
 		return ctrl.Result{}, err
 	}
 
-	allReady := true
-	var resources []apiv1alpha1.ManagedResource
-
-	for _, chart := range providerConfig.Spec.Charts {
-		chartResources, err := r.reconcileChart(ctx, svcobj, chart, tenantNamespace, domainSuffix, clusters)
-		if err != nil {
-			serviceprovider.StatusProgressing(svcobj, conditionReasonError, err.Error())
-			return ctrl.Result{}, err
-		}
-		for _, res := range chartResources {
-			if res.Phase != apiv1alpha1.Ready {
-				allReady = false
-			}
-		}
-		resources = append(resources, chartResources...)
+	resources, allReady, err := r.reconcileCharts(ctx, svcobj, providerConfig, tenantNamespace, domainSuffix, clusters)
+	if err != nil {
+		serviceprovider.StatusProgressing(svcobj, conditionReasonError, err.Error())
+		return ctrl.Result{}, err
 	}
 
 	if err := r.deleteRemovedCharts(ctx, tenantNamespace, providerConfig.Spec.Charts); err != nil {
@@ -195,6 +184,24 @@ func (r *ODGReconciler) workloadClusterRef(ctx context.Context, tenantNamespace,
 		return ar.Spec.ClusterRef, nil
 	}
 	return nil, fmt.Errorf("workload AccessRequest has no clusterRef")
+}
+
+func (r *ODGReconciler) reconcileCharts(ctx context.Context, svcobj *apiv1alpha1.ODG, providerConfig *apiv1alpha1.ProviderConfig, tenantNamespace, domainSuffix string, clusters clusteraccess.ClusterContext) ([]apiv1alpha1.ManagedResource, bool, error) {
+	allReady := true
+	var resources []apiv1alpha1.ManagedResource
+	for _, chart := range providerConfig.Spec.Charts {
+		chartResources, err := r.reconcileChart(ctx, svcobj, chart, tenantNamespace, domainSuffix, clusters)
+		if err != nil {
+			return nil, false, err
+		}
+		for _, res := range chartResources {
+			if res.Phase != apiv1alpha1.Ready {
+				allReady = false
+			}
+		}
+		resources = append(resources, chartResources...)
+	}
+	return resources, allReady, nil
 }
 
 func (r *ODGReconciler) reconcileChart(ctx context.Context, svcobj *apiv1alpha1.ODG, chart apiv1alpha1.ODGChart, tenantNamespace, domainSuffix string, clusters clusteraccess.ClusterContext) ([]apiv1alpha1.ManagedResource, error) {
