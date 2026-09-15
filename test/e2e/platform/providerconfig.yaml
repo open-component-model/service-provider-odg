@@ -46,15 +46,6 @@ spec:
       chartPullSecretName: privateregcred
       chartURL: europe-docker.pkg.dev/gardener-project/releases/charts/odg/extensions
       chartVersion: 0.1371.0
-      helmValues:
-        artefact-enumerator:
-          enabled: true
-        backlog-controller:
-          enabled: true
-        cache-manager:
-          enabled: true
-        responsibles:
-          enabled: true
     - chartName: delivery-db
       chartPullSecretName: privateregcred
       chartURL: europe-docker.pkg.dev/gardener-project/releases/charts/ocm-gear/postgresql

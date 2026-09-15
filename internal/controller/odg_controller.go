@@ -107,6 +107,11 @@ func (r *ODGReconciler) CreateOrUpdate(ctx context.Context, svcobj *apiv1alpha1.
 		return ctrl.Result{}, err
 	}
 
+	if err := r.syncExtensionsFromBootstrapping(ctx, svcobj, providerConfig); err != nil {
+		serviceprovider.StatusProgressing(svcobj, conditionReasonError, err.Error())
+		return ctrl.Result{}, err
+	}
+
 	resources, allReady, err := r.reconcileCharts(ctx, svcobj, providerConfig, tenantNamespace, domainSuffix, clusters)
 	if err != nil {
 		serviceprovider.StatusProgressing(svcobj, conditionReasonError, err.Error())
@@ -677,6 +682,119 @@ func managedResources(tenantNamespace string, charts []apiv1alpha1.ODGChart, pha
 		)
 	}
 	return resources
+}
+
+// extensionsCfgGatedCharts maps chart names to their extensions_cfg key. Charts in this map
+// are skipped (removed from the reconcile set) when their extensions_cfg key is absent or
+// has enabled: false in the bootstrapping values.
+var extensionsCfgGatedCharts = map[string]string{
+	"blackduck":       "blackduck",
+	"sla-report":      "sla_violation_profiler",
+	"findings-report": "findings_report",
+}
+
+// syncExtensionsFromBootstrapping reads the enabled flags from the bootstrapping chart's
+// extensions_cfg section, mirrors them (underscore → hyphen key mapping) into the extensions
+// chart's helm values, and removes gated charts that are not enabled.
+func (r *ODGReconciler) syncExtensionsFromBootstrapping(ctx context.Context, svcobj *apiv1alpha1.ODG, providerConfig *apiv1alpha1.ProviderConfig) error {
+	bootstrapValues, found := findHelmValues(providerConfig, "bootstrapping")
+	if !found {
+		return nil
+	}
+
+	merged, err := r.mergeODGConfiguration(ctx, bootstrapValues, svcobj)
+	if err != nil {
+		return fmt.Errorf("failed to resolve bootstrapping values for extensions sync: %w", err)
+	}
+	if merged == nil {
+		return nil
+	}
+
+	var bootstrapMap map[string]any
+	if err := json.Unmarshal(merged.Raw, &bootstrapMap); err != nil {
+		return fmt.Errorf("failed to parse bootstrapping helm values: %w", err)
+	}
+
+	extCfg, _ := bootstrapMap["extensions_cfg"].(map[string]any)
+	providerConfig.Spec.Charts = filterGatedCharts(providerConfig.Spec.Charts, extCfg)
+	return applyExtensionsOverlay(providerConfig, extCfg)
+}
+
+// findHelmValues returns the HelmValues of the named chart, if present.
+func findHelmValues(providerConfig *apiv1alpha1.ProviderConfig, chartName string) (*apiextensionsv1.JSON, bool) {
+	for i := range providerConfig.Spec.Charts {
+		if providerConfig.Spec.Charts[i].ChartName == chartName {
+			return providerConfig.Spec.Charts[i].HelmValues, true
+		}
+	}
+	return nil, false
+}
+
+// filterGatedCharts removes charts whose extensions_cfg key is absent or disabled.
+func filterGatedCharts(charts []apiv1alpha1.ODGChart, extCfg map[string]any) []apiv1alpha1.ODGChart {
+	filtered := make([]apiv1alpha1.ODGChart, 0, len(charts))
+	for _, chart := range charts {
+		if cfgKey, gated := extensionsCfgGatedCharts[chart.ChartName]; gated && !isExtensionEnabled(extCfg, cfgKey) {
+			continue
+		}
+		filtered = append(filtered, chart)
+	}
+	return filtered
+}
+
+// applyExtensionsOverlay merges the enabled flags from extCfg into the extensions chart's helm values.
+func applyExtensionsOverlay(providerConfig *apiv1alpha1.ProviderConfig, extCfg map[string]any) error {
+	if extCfg == nil {
+		return nil
+	}
+	extensionsIdx := -1
+	for i := range providerConfig.Spec.Charts {
+		if providerConfig.Spec.Charts[i].ChartName == "extensions" {
+			extensionsIdx = i
+			break
+		}
+	}
+	if extensionsIdx < 0 {
+		return nil
+	}
+	extensionsValues := providerConfig.Spec.Charts[extensionsIdx].HelmValues
+
+	// Build enabled overlay for the extensions chart: underscore keys → hyphen keys.
+	overlay := make(map[string]any, len(extCfg))
+	for key := range extCfg {
+		overlay[strings.ReplaceAll(key, "_", "-")] = map[string]any{"enabled": isExtensionEnabled(extCfg, key)}
+	}
+	if len(overlay) == 0 {
+		return nil
+	}
+
+	overlayJSON, err := json.Marshal(overlay)
+	if err != nil {
+		return fmt.Errorf("failed to marshal extensions overlay: %w", err)
+	}
+	updated, err := mergeHelmValues(extensionsValues, &apiextensionsv1.JSON{Raw: overlayJSON})
+	if err != nil {
+		return fmt.Errorf("failed to merge extensions enabled flags: %w", err)
+	}
+	providerConfig.Spec.Charts[extensionsIdx].HelmValues = updated
+	return nil
+}
+
+// isExtensionEnabled returns true when extCfg has the given key and it is not explicitly disabled.
+// Absent key → false. Present without "enabled" field → true. Present with enabled=true → true.
+func isExtensionEnabled(extCfg map[string]any, key string) bool {
+	if extCfg == nil {
+		return false
+	}
+	m, ok := extCfg[key].(map[string]any)
+	if !ok {
+		return false
+	}
+	enabled, exists := m["enabled"].(bool)
+	if !exists {
+		return true
+	}
+	return enabled
 }
 
 // deleteRemovedCharts deletes OCIRepository and HelmRelease objects in tenantNamespace
