@@ -1,0 +1,14 @@
+# Order Crossplane for your control plane on the onboarding cluster
+apiVersion: crossplane.services.open-control-plane.io/v1alpha1
+kind: Crossplane
+metadata:
+  name: my-postgres-cp            # must match ControlPlane name
+  namespace: project-my-project--ws-dev   # must match ControlPlane namespace
+spec:
+  version: "v2.3.3" # replace with the desired crossplane version, e.g., "v2.0.2-1"
+  providers: # here, the required Crossplane providers can be specified
+    - name: provider-btp
+      version: "v1.11.0" # replace with the desired provider version, e.g., "v0.15.0"
+  # functions: # here, the required Crossplane functions can be specified
+  #   - name: function-patch-and-transform
+  #     version: "<function-version>" # replace with the desired provider version, e.g., "v0.10.8"

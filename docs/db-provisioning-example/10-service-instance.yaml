@@ -1,0 +1,40 @@
+# Control Plane
+# Created the instance in my test on BTP, but never got to the state ready, 
+# somehow did not manage to sync the crossplane ID and create credentials
+apiVersion: account.btp.sap.crossplane.io/v1alpha1
+kind: ServiceInstance
+metadata:
+  name: postgres-hyperscaler-instance1
+spec:
+  forProvider:
+    name: postgres-hyperscaler-instance1
+    subaccountRef:
+      name: my-project-ocp
+    serviceManagerRef:
+      name: my-project-ocp-service-manager
+    offeringName: postgresql-db
+    planName: standard
+    parameters:
+      allow_access: "<your-public-ip>/32" # change that
+      audit_log_level:
+        - ROLE
+        - DDL
+      backup_retention_period: 1
+      cross_region_backup: false
+      db_parameters: []
+      engine_version: "17"
+      locale: en_US
+      maintenance_window:
+        day_of_week: Sunday
+        duration: 1
+        start_hour_utc: 4
+      memory: 2
+      multi_az: false
+      region: eu-central-1
+      storage: 5
+      public_access: true 
+  writeConnectionSecretToRef:  # did not work for me, but may be working later (see timeout problem in README.md)
+    name: postgres-hyperscaler-credentials1
+    namespace: default
+  providerConfigRef:
+    name: account-provider-config
