@@ -34,6 +34,7 @@ func getWorkloadClusterConfig() (*envconf.Config, error) {
 const (
 	gatewayFinalizer       = "platformservice.openmcp.cloud/gateway"
 	clusterAccessFinalizer = "clusters.openmcp.cloud/clusteraccess"
+	clusterFinalizer       = "clusters.openmcp.cloud/finalizer"
 )
 
 func cleanupStuckGatewayFinalizers(ctx context.Context, t *testing.T, c *envconf.Config, namespace string) {
@@ -81,7 +82,7 @@ func cleanupStuckGatewayFinalizers(ctx context.Context, t *testing.T, c *envconf
 		}
 		var updated []string
 		for _, f := range finalizers {
-			if f != clusterAccessFinalizer {
+			if f != clusterAccessFinalizer && f != clusterFinalizer {
 				updated = append(updated, f)
 			}
 		}

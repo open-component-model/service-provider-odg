@@ -33,7 +33,7 @@ func TestMain(m *testing.M) {
 		Operator: setup.OpenMCPOperatorSetup{
 			Name: "openmcp-operator",
 			// renovate: datasource=docker depName=ghcr.io/openmcp-project/images/openmcp-operator
-			Image:        "ghcr.io/openmcp-project/images/openmcp-operator:v1.3.0",
+			Image:        "ghcr.io/openmcp-project/images/openmcp-operator:v1.4.0",
 			Environment:  "debug",
 			PlatformName: "platform",
 			ExtraClusterPurposeMapping: []providers.ClusterPurposeMapping{
@@ -61,7 +61,7 @@ func TestMain(m *testing.M) {
 		PlatformServices: []platformservices.PlatformServiceSetup{
 			{
 				Name:                      "gateway",
-				Image:                     "ghcr.io/openmcp-project/images/platform-service-gateway:v0.0.10",
+				Image:                     "ghcr.io/openmcp-project/images/platform-service-gateway:v0.2.1",
 				PlatformServiceConfigsDir: "platformservice-gateway",
 			},
 		},

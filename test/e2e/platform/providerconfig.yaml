@@ -7,7 +7,7 @@ spec:
     - chartName: bootstrapping
       chartPullSecretName: privateregcred
       chartURL: europe-docker.pkg.dev/gardener-project/releases/charts/odg/bootstrapping
-      chartVersion: 0.1371.0
+      chartVersion: 0.1372.0
       helmValues:
         extensions_cfg:
           defaults:
@@ -32,7 +32,7 @@ spec:
     - chartName: delivery-service
       chartPullSecretName: privateregcred
       chartURL: europe-docker.pkg.dev/gardener-project/releases/charts/odg/delivery-service
-      chartVersion: 0.1371.0
+      chartVersion: 0.1372.0
       helmValues:
         host: delivery-service<workload-shoot-domain-placeholder>
         gateway:
@@ -45,7 +45,7 @@ spec:
     - chartName: extensions
       chartPullSecretName: privateregcred
       chartURL: europe-docker.pkg.dev/gardener-project/releases/charts/odg/extensions
-      chartVersion: 0.1371.0
+      chartVersion: 0.1372.0
     - chartName: delivery-db
       chartPullSecretName: privateregcred
       chartURL: europe-docker.pkg.dev/gardener-project/releases/charts/ocm-gear/postgresql
