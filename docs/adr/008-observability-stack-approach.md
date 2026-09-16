@@ -99,6 +99,71 @@ and are not a goal.
 Whichever team (OCP or ODG) reaches this topic first shares their findings and
 aligns with the other before building dashboards or alerts on top.
 
+## Target Architecture
+
+The diagram shows the new pods running on each ODG workload cluster — installed
+by OCP where available, otherwise self-installed by ODG with identical Helm
+charts — and the SAP Cloud Logging service outside the cluster acting as the
+central telemetry hub. The openMCP `observability-stack` (Prometheus + Victoria
+Logs) on the platform cluster is an optional add-on to adopt once OIDC access
+is available, not a prerequisite. Monitoring of the central ODG ControlPlane
+(BTP databases) and the onboarding cluster is not covered yet — shown as a
+dashed TBD area below. They may run their own operator/collector instances and
+point directly at Cloud Logging or the observability-stack; this needs a
+follow-up decision.
+
+```mermaid
+flowchart TB
+  subgraph WL["Workload-ODG Cluster"]
+    subgraph NewPods["New Pods (OCP-provided, or ODG self-installed fallback)"]
+      MO["Metrics Operator\n- watches Metric CRs\n- K8s object metrics"]
+      OC["OTel Collector\n- OTLP gRPC :4317 / HTTP :4318\n- kubeletstatsreceiver\n- k8sclusterreceiver\n- filelogreceiver"]
+    end
+
+    Apps["ODG Components / App Pods\n(OTel SDK / auto-instrumentation)"]
+    CRs["Kubernetes Objects\n(Pods, HelmReleases, CRDs, …)"]
+    Kubelet["Kubelet API\n(per node)"]
+    KAPI["Kubernetes API"]
+    PodLogs["Pod Logs\n(/var/log/pods per node)"]
+
+    CRs -->|watched / scraped| MO
+    MO -->|push OTLP gRPC :4317| OC
+    Apps -->|push OTLP gRPC :4317 / HTTP :4318| OC
+    Kubelet -->|pull container/pod metrics| OC
+    KAPI -->|pull node and cluster state| OC
+    PodLogs -->|read stdout/stderr| OC
+  end
+
+  subgraph Platform["Platform Cluster"]
+    subgraph ObsStack["observability-stack (optional add-on)"]
+      Prom["Prometheus\n(metrics)"]
+      VL["Victoria Logs\n(logs)"]
+    end
+  end
+
+  subgraph BTP["SAP BTP (external)"]
+    CL["Cloud Logging Service"]
+    DT["Dynatrace"]
+    AVS["Availability Service"]
+
+    CL -->|routing configured centrally| DT
+    CL -->|routing configured centrally| AVS
+  end
+
+  subgraph TBD["Not yet resolved (follow-up decision)"]
+    ONB["Onboarding Cluster"]
+    CP["Central ODG ControlPlane\n(BTP databases)"]
+  end
+
+  ONB -.->|"monitoring TBD?"| CL
+  ONB -.->|"monitoring TBD?"| ObsStack
+  CP -.->|"monitoring TBD?"| CL
+  CP -.->|"monitoring TBD?"| ObsStack
+  OC -->|"forward all signals (OTLP)"| CL
+  OC -.->|optional intermediate path| ObsStack
+  ObsStack -.->|telemetry converges here too| CL
+```
+
 ## Consequences
 
 Positive:
