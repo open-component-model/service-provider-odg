@@ -1,0 +1,21 @@
+# control plane
+# May not be necessary if the service instance populates them after a succesful create with a longer timeout.
+apiVersion: account.btp.sap.crossplane.io/v1alpha1
+kind: ServiceBinding
+metadata:
+  name: postgres-hyperscaler-binding
+spec:
+  forProvider:
+    name: postgres-hyperscaler-binding    # name in BTP
+    serviceInstanceRef:
+      name: postgres-hyperscaler-instance1
+    subaccountRef:
+      name: my-project-ocp
+    parameters:
+      enable_cmk: false
+      show_cert_url: true
+  writeConnectionSecretToRef:
+    name: postgres-hyperscaler-binding-credentials  # 👈 credentials written here
+    namespace: default
+  providerConfigRef:
+    name: account-provider-config

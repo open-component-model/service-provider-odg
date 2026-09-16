@@ -1,0 +1,14 @@
+# Onboarding cluster
+apiVersion: core.openmcp.cloud/v1alpha1
+kind: Workspace
+metadata:
+  name: dev
+  namespace: project-my-project  # "project-" is mandatory
+  annotations:
+    openmcp.cloud/display-name: Cloud Orchestrator Development
+spec:
+  members:
+    - kind: User
+      name: your.email@sap.com # change that to what you are using
+      roles:
+        - admin

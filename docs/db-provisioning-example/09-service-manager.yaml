@@ -1,0 +1,25 @@
+# control plane
+apiVersion: account.btp.sap.crossplane.io/v1beta1
+kind: ServiceManager
+metadata:
+  name: my-project-ocp-service-manager
+spec:
+  forProvider:
+    subaccountRef:
+      name: my-project-ocp
+    # planName omitted → defaults to subaccount-admin (new default as per migration doc)
+  writeConnectionSecretToRef:
+    name: sap-btp-service-operator   # 👈 credentials written here, needed by ServiceInstance later
+    namespace: default
+  providerConfigRef:
+    name: account-provider-config
+
+## I had a problem that writeConnectionSecret was not written. Not sure why, but if that happens here is a patch:
+# kubectl patch servicemanager my-project-ocp-service-manager --type=merge -p '{
+#   "spec": {
+#     "writeConnectionSecretToRef": {
+#       "name": "sap-btp-service-operator",
+#       "namespace": "default"
+#     }
+#   }
+# }'

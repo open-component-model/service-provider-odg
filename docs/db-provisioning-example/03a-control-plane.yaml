@@ -1,0 +1,17 @@
+# Onboarding cluster
+apiVersion: core.open-control-plane.io/v2alpha1
+kind: ControlPlane
+metadata:
+  name: my-postgres-cp # change to what you want
+  namespace: "project-my-project--ws-dev" # replace with the namespace of your Workspace
+spec:
+  iam:
+    oidc:
+      defaultProvider:
+        roleBindings: # this sets the role bindings for the default OIDC provider
+        - subjects:
+          - kind: User
+            name: your.email@sap.com # change that to what you are using
+          roleRefs:
+          - kind: ClusterRole
+            name: cluster-admin

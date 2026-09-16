@@ -1,0 +1,17 @@
+# Onboarding cluster
+apiVersion: core.openmcp.cloud/v1alpha1
+kind: Project
+metadata:
+  # Change that to your needs!
+  name: my-project # chose a name of the project
+  annotations:
+    openmcp.cloud/display-name: Cloud Orchestrator IaD setup
+  labels:
+    openmcp.cloud.sap/charging-target-type: btp   ## Mandatory
+    openmcp.cloud.sap/charging-target: "8b7fcd40...f1a7c7ce9566"  ## Mandatory, it's from the BTP URL
+spec:
+  members:
+    - kind: User
+      name: your.email@sap.com  ## Change that!
+      roles:
+        - admin

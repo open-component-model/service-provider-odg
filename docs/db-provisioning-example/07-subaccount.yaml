@@ -1,0 +1,19 @@
+# control plane
+apiVersion: account.btp.sap.crossplane.io/v1alpha1
+kind: Subaccount
+metadata:
+  name: my-project-ocp
+spec:
+  forProvider:
+    betaEnabled: true
+    description: Subaccount created via BTP crossplane provider from OCP Canary
+    displayName: my-project-ocp # This value will be displayed as a subaccount name in the BTP cockpit
+    region: eu12 # Adjust if needed - eu12 is AWS Frankfurt, see screenshot for options
+    subaccountAdmins:
+      - dl_....sap # Use the email address of your technical user from the sa secret
+      - your.email@sap.com # Use your email so you can visit it in the BTP Canary Cockpit
+    subdomain: my-project-ocp  # This value must be unique across all BTP subaccounts, free to chose
+    usedForProduction: "NOT_USED_FOR_PRODUCTION" # Other supported values are "USED_FOR_PRODUCTION" and "UNSET"
+  providerConfigRef:
+    name: account-provider-config
+

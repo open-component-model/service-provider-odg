@@ -1,0 +1,30 @@
+# control plane
+# 1. Storage plan (infrastructure quota)
+apiVersion: account.btp.sap.crossplane.io/v1alpha1
+kind: Entitlement
+metadata:
+  name: postgres-hyperscaler-storage-entitlement
+spec:
+  forProvider:
+    serviceName: postgresql-db
+    servicePlanName: storage
+    amount: 1
+    subaccountRef:
+      name: my-project-ocp
+  providerConfigRef:
+    name: account-provider-config
+---
+# 2. Standard plan (actual postgres service)
+apiVersion: account.btp.sap.crossplane.io/v1alpha1
+kind: Entitlement
+metadata:
+  name: postgres-hyperscaler-standard-entitlement
+spec:
+  forProvider:
+    serviceName: postgresql-db
+    servicePlanName: standard
+    amount: 1
+    subaccountRef:
+      name: my-project-ocp
+  providerConfigRef:
+    name: account-provider-config
