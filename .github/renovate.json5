@@ -1,0 +1,167 @@
+{
+  $schema: 'https://docs.renovatebot.com/renovate-schema.json',
+  extends: [
+    'config:recommended',
+    'config:best-practices',
+    'helpers:pinGitHubActionDigests',
+    'security:openssf-scorecard',
+    ':dependencyDashboard',
+    ':rebaseStalePrs',
+  ],
+  // config:recommended ignores test directories via :ignoreModulesAndTests —
+  // undo that so the annotated image pins in test/e2e/*.go are managed.
+  ignorePresets: [':ignoreModulesAndTests'],
+  internalChecksFilter: 'strict',
+  minimumReleaseAge: '7 days',
+  branchPrefix: 'renovate/',
+  prConcurrentLimit: 5,
+  prHourlyLimit: 0,
+  automerge: false,
+  automergeType: 'pr',
+  vulnerabilityAlerts: {
+    minimumReleaseAge: null,
+    automerge: false,
+  },
+  // The hack/common submodule (openmcp-project/build) provides the Taskfile /
+  // workflow scaffolding; renovate keeps it up to date and groups it with the
+  // workflow refs pointing at the same repo (see packageRules below).
+  'git-submodules': {
+    enabled: true,
+  },
+  // Replaces the corresponding list in the central config (open-component-
+  // model/.github) — arrays don't merge, so the central bot entries must be
+  // repeated here. github-actions[bot] is needed because the
+  // renovate-generate workflow (openmcp-project/build) commits generated
+  // content onto renovate/* branches under that identity; without it
+  // renovate would treat its own branches as externally edited and abandon
+  // them.
+  gitIgnoredAuthors: [
+    'github-actions[bot]@users.noreply.github.com',
+    '319464553+odgbot[bot]@users.noreply.github.com',
+    '125909804+ocmbot[bot]@users.noreply.github.com',
+  ],
+  postUpdateOptions: ['gomodTidy'],
+  packageRules: [
+    {
+      // Majors wait as checkboxes in the dependency dashboard ("Pending
+      // Approval") instead of occupying prConcurrentLimit slots — tick one
+      // there to have its PR created when you're ready to work on it.
+      matchUpdateTypes: ['major'],
+      dependencyDashboardApproval: true,
+    },
+    {
+      matchUpdateTypes: ['patch'],
+      automerge: true,
+    },
+    {
+      matchManagers: ['github-actions'],
+      automerge: true,
+    },
+    {
+      description: 'Group openmcp-project/build submodule and workflow updates',
+      matchDepNames: ['hack/common', 'openmcp-project/build'],
+      groupName: 'openmcp-project/build',
+      // Internal build scaffolding moves fast; don't make it wait out the
+      // stability window (mirrors the shared openmcp-project preset).
+      minimumReleaseAge: '0 days',
+    },
+    // --- Ported from the old shared openmcp-project preset -------------
+    // (github>openmcp-project/.github:renovate-config, which this repo's
+    // renovate.json-era setup effectively tracked):
+    {
+      description:
+        'Internal co-developed openmcp-project packages should not wait out the 7-day stability window',
+      matchSourceUrls: ['https://github.com/openmcp-project/**'],
+      minimumReleaseAge: '0 days',
+    },
+    {
+      description:
+        'hack/common tracks the moving main branch of the openmcp build scaffolding — its digest bumps are safe to automerge after green CI',
+      matchManagers: ['git-submodules'],
+      automerge: true,
+    },
+    {
+      description:
+        'go directive bumps (go 1.x.y in go.mod) rewrite the directive in place',
+      matchManagers: ['gomod'],
+      matchDepTypes: ['golang'],
+      rangeStrategy: 'bump',
+    },
+    {
+      description:
+        'Regex-managed docker images are strings in Go test code without a digest capture group — keep them tag-only (docker:pinDigests is inherited from config:best-practices; sibling repo openmcp-service-provider-flux shows renovate leaves these alone, this makes it explicit)',
+      matchManagers: ['custom.regex'],
+      matchDatasources: ['docker'],
+      pinDigests: false,
+    },
+    // --- Go module grouping --------------------------------------------
+    // (k8s.io/**, go.opentelemetry.io/** and go-openapi/** are already
+    // grouped by group:monorepos / group:recommended from config:recommended)
+    {
+      description:
+        'k8s.io/libs move in lockstep with controller-runtime (e.g. v0.37 needs controller-runtime v0.24) — updating one without the other breaks the build, so go together in a single PR',
+      matchPackageNames: ['k8s.io/**', 'sigs.k8s.io/controller-runtime'],
+      groupName: 'k8s.io',
+    },
+    {
+      description: 'Remaining sigs.k8s.io deps (e2e-framework, yaml, kind)',
+      matchPackageNames: ['sigs.k8s.io/**'],
+      groupName: 'sigs.k8s.io',
+    },
+    {
+      description: 'Flux CD ecosystem (flux2, *-controller/apis, fluxcd/pkg)',
+      matchPackageNames: ['github.com/fluxcd/**'],
+      groupName: 'fluxcd',
+    },
+    {
+      description:
+        'openmcp-project Go libraries (direct deps only — any indirect ones land in the indirect group)',
+      matchPackageNames: ['github.com/openmcp-project/**'],
+      matchDepTypes: ['direct'],
+      groupName: 'openmcp-project',
+    },
+    {
+      description:
+        'Roll all go.mod // indirect bumps into one rolling PR — direct-dependency PRs carry their own transitive bumps via gomodTidy anyway',
+      matchManagers: ['gomod'],
+      matchDepTypes: ['indirect'],
+      groupName: 'go indirect dependencies',
+    },
+    // --- Safety valve (from open-component-model/ocm) ------------------
+    {
+      description:
+        'These update types carry no release timestamp; a global minimumReleaseAge can otherwise delay them indefinitely (observed in the ocm repo). digest/pinDigest keep the 7-day gate deliberately.',
+      matchUpdateTypes: [
+        'lockFileMaintenance',
+        'lockfileUpdate',
+        'pin',
+        'replacement',
+        'bump',
+        'rollback',
+      ],
+      minimumReleaseAge: null,
+    },
+  ],
+  customManagers: [
+    {
+      // Docker image pins in e2e test code, annotated on the preceding line:
+      //   // renovate: datasource=docker depName=ghcr.io/openmcp-project/images/openmcp-operator
+      //   Image: "ghcr.io/openmcp-project/images/openmcp-operator:v1.3.0",
+      customType: 'regex',
+      managerFilePatterns: ['/test/e2e/.*\\.go$/'],
+      matchStrings: [
+        '// renovate: datasource=(?<datasource>[^\\s]+) depName=(?<depName>[^\\s]+)\\s+[^"]*"[^:]+:(?<currentValue>[^"]+)"',
+      ],
+    },
+    {
+      // Tool version pins in Taskfile.yaml, annotated on the preceding line:
+      //   # renovate: datasource=github-releases depName=fluxcd/flux2
+      //   FLUX_VERSION: v2.9.4
+      customType: 'regex',
+      managerFilePatterns: ['/Taskfile\\.yaml$/'],
+      matchStrings: [
+        '# renovate: datasource=(?<datasource>[^\\s]+) depName=(?<depName>[^\\s]+)\\s+\\w+_VERSION:\\s*[\'"]?(?<currentValue>[^\\s\'"]+)',
+      ],
+    },
+  ],
+}

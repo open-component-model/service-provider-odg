@@ -1,0 +1,53 @@
+name: Renovate
+on:
+  schedule:
+    - cron: '0 1 * * *'  # nightly at 1am UTC
+  # Run after every merge to the default branch so renovate rebases /
+  # automerges its PRs before they go stale.
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/renovate.yml
+      - .github/renovate.json5
+  workflow_dispatch:
+    inputs:
+      repoCache:
+        description: 'Repository cache: enabled (use + update), disabled (skip), reset (discard old, start fresh)'
+        type: choice
+        default: enabled
+        options: [ enabled, disabled, reset ]
+      ignoreSchedule:
+        description: 'Ignore renovate schedule settings'
+        type: boolean
+        default: false
+      logLevel:
+        description: 'Log level'
+        type: choice
+        default: info
+        options: [ info, debug ]
+      useOdgbotCredentials:
+        description: 'Use GitHub App credentials if configured (else: GITHUB_TOKEN)'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  renovate:
+    uses: open-component-model/.github/.github/workflows/renovate.yml@v1
+    secrets: inherit
+    with:
+      repository: ${{ github.repository }}
+      # Override for forks:
+      # centralConfig: alexbass01/open-component-model-github@main
+      repoCache: ${{ inputs.repoCache || 'enabled' }}
+      ignoreSchedule: ${{ github.event_name == 'workflow_dispatch' && inputs.ignoreSchedule }}
+      logLevel: ${{ inputs.logLevel || 'info' }}
+      useOdgbotCredentials: ${{ github.event_name != 'workflow_dispatch' || inputs.useOdgbotCredentials }}
+      # Pull requests validate the config via a read-only dry-run.
+      dryRun: ${{ github.event_name == 'pull_request' }}
