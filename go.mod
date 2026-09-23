@@ -3,13 +3,13 @@ module github.com/open-component-model/service-provider-odg
 go 1.27.1
 
 require (
-	github.com/fluxcd/helm-controller/api v1.6.3
-	github.com/fluxcd/pkg/apis/meta v1.30.1
-	github.com/fluxcd/source-controller/api v1.9.4
+	github.com/fluxcd/helm-controller/api v1.6.4
+	github.com/fluxcd/pkg/apis/meta v1.30.2
+	github.com/fluxcd/source-controller/api v1.9.5
 	github.com/openmcp-project/controller-utils v0.33.1
-	github.com/openmcp-project/opencontrolplane-runtime v1.3.1
-	github.com/openmcp-project/openmcp-operator/api v1.4.0
-	github.com/openmcp-project/openmcp-operator/lib v1.4.0
+	github.com/openmcp-project/opencontrolplane-runtime v1.4.1
+	github.com/openmcp-project/openmcp-operator/api v1.4.1
+	github.com/openmcp-project/openmcp-operator/lib v1.4.1
 	github.com/openmcp-project/openmcp-testing v1.2.0
 	github.com/spf13/pflag v1.0.10
 	k8s.io/api v0.37.0
