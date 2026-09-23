@@ -11,4 +11,4 @@ permissions:
 
 jobs:
   validate_pr_content:
-    uses: openmcp-project/build/.github/workflows/validate-pr-content.lib.yaml@45b4a9ddc7707ac7a1d621e5dbec9732a0eeb84b # main
+    uses: openmcp-project/build/.github/workflows/validate-pr-content.lib.yaml@dcab75e52b34789ede669947300504d208d06ae3 # main

@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   generate:
-    uses: openmcp-project/build/.github/workflows/renovate-generate.lib.yaml@c2d37b930a47b3596b919583887f92c7e37987e3 # main
+    uses: openmcp-project/build/.github/workflows/renovate-generate.lib.yaml@dcab75e52b34789ede669947300504d208d06ae3 # main
     secrets:
       app_private_key: ${{ secrets.ODG_BOT_PRIVATE_KEY }}
     with:

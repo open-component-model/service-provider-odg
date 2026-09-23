@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   release_publish:
-    uses: openmcp-project/build/.github/workflows/publish.lib.yaml@1dfe1496cdee935bf61006c706e5fd3ecd06b82e # main
+    uses: openmcp-project/build/.github/workflows/publish.lib.yaml@dcab75e52b34789ede669947300504d208d06ae3 # main
     secrets:
       app_private_key: ${{ secrets.ODG_BOT_PRIVATE_KEY }}
     with:
