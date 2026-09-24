@@ -205,9 +205,17 @@ func TestServiceProvider(t *testing.T) {
 					t.Errorf("bootstrapping-values missing extensions_cfg (expected from ConfigurationRef ConfigMap)")
 				}
 
-				// Secret contribution: secrets key must be present and override/extend ConfigMap
-				if _, ok := merged["secrets"]; !ok {
+				// Secret contribution: secrets key must be present and contain "aws" and "delivery-db" sub-keys
+				if secrets, ok := merged["secrets"]; !ok {
 					t.Errorf("bootstrapping-values missing secrets (expected from SecretsRef Secret)")
+				} else if secretsMap, ok := secrets.(map[string]any); !ok {
+					t.Errorf("bootstrapping-values secrets is not a map")
+				} else {
+					for _, key := range []string{"aws", "delivery-db"} {
+						if _, ok := secretsMap[key]; !ok {
+							t.Errorf("bootstrapping-values secrets missing key %q", key)
+						}
+					}
 				}
 
 				t.Logf("bootstrapping-values Secret contains merged keys: %v", func() []string {

@@ -58,7 +58,8 @@ metadata:
 stringData:
   values.yaml: |
     secrets:
-      delivery-db:
+      aws:
         local:
-          username: postgres
-          password: foo
+          access_key_id: ''
+          secret_access_key: ''
+          region: ''

@@ -21,6 +21,11 @@ spec:
             enabled: true
           responsibles:
             enabled: true
+        secrets:
+          delivery-db:
+            local:
+              username: postgres
+              password: foo
     - chartName: delivery-dashboard
       chartPullSecretName: privateregcred
       chartURL: oci://europe-docker.pkg.dev/gardener-project/releases/charts/odg/delivery-dashboard
