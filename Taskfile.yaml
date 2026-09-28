@@ -12,6 +12,8 @@ vars:
   CHART_COMPONENTS: '[]'
   REPO_URL: 'https://github.com/open-component-model/service-provider-odg'
   COMMON_SCRIPT_DIR: '{{.ROOT_DIR}}/hack/common'
+  CRDS_COMPONENTS: 'service-provider-odg'
+  CRDS_PATH: '{{.ROOT_DIR}}/api/crds/manifests'
 
 includes:
   shared:
