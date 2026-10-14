@@ -396,3 +396,132 @@ func TestDataToJSON(t *testing.T) {
 		})
 	}
 }
+
+func TestIsExternalDatabase(t *testing.T) {
+	tests := []struct {
+		name  string
+		input map[string]any
+		want  bool
+	}{
+		{
+			name:  "empty map returns false",
+			input: map[string]any{},
+			want:  false,
+		},
+		{
+			name:  "no secrets key returns false",
+			input: map[string]any{"other": map[string]any{}},
+			want:  false,
+		},
+		{
+			name:  "secrets without delivery-db returns false",
+			input: map[string]any{"secrets": map[string]any{}},
+			want:  false,
+		},
+		{
+			name: "delivery-db entry without hostname field returns false",
+			input: map[string]any{"secrets": map[string]any{
+				"delivery-db": map[string]any{
+					"local": map[string]any{"username": "postgres", "password": "secret"},
+				},
+			}},
+			want: false,
+		},
+		{
+			name: "delivery-db entry with empty hostname returns false",
+			input: map[string]any{"secrets": map[string]any{
+				"delivery-db": map[string]any{
+					"local": map[string]any{"hostname": ""},
+				},
+			}},
+			want: false,
+		},
+		{
+			name: "delivery-db entry with hostname returns true",
+			input: map[string]any{"secrets": map[string]any{
+				"delivery-db": map[string]any{
+					"local": map[string]any{"hostname": "pg.example.com", "username": "u", "password": "p"},
+				},
+			}},
+			want: true,
+		},
+		{
+			name: "optional port and database fields omitted but hostname present returns true",
+			input: map[string]any{"secrets": map[string]any{
+				"delivery-db": map[string]any{
+					"local": map[string]any{"username": "u", "password": "p", "hostname": "pg.example.com"},
+				},
+			}},
+			want: true,
+		},
+		{
+			name: "multiple entries, only one with hostname returns true",
+			input: map[string]any{"secrets": map[string]any{
+				"delivery-db": map[string]any{
+					"no-host":   map[string]any{"username": "u", "password": "p"},
+					"with-host": map[string]any{"username": "u", "password": "p", "hostname": "pg.example.com"},
+				},
+			}},
+			want: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := isExternalDatabase(tc.input)
+			if got != tc.want {
+				t.Errorf("isExternalDatabase(%v) = %v, want %v", tc.input, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestExcludeChartByName(t *testing.T) {
+	makeCharts := func(names ...string) []apiv1alpha1.ODGChart {
+		charts := make([]apiv1alpha1.ODGChart, len(names))
+		for i, n := range names {
+			charts[i] = apiv1alpha1.ODGChart{ChartName: n}
+		}
+		return charts
+	}
+
+	tests := []struct {
+		name   string
+		charts []apiv1alpha1.ODGChart
+		remove string
+		want   []string
+	}{
+		{
+			name:   "removes present chart",
+			charts: makeCharts("bootstrapping", "delivery-db", "extensions"),
+			remove: "delivery-db",
+			want:   []string{"bootstrapping", "extensions"},
+		},
+		{
+			name:   "absent chart name leaves slice unchanged",
+			charts: makeCharts("bootstrapping", "extensions"),
+			remove: "delivery-db",
+			want:   []string{"bootstrapping", "extensions"},
+		},
+		{
+			name:   "empty slice returns empty slice",
+			charts: makeCharts(),
+			remove: "delivery-db",
+			want:   []string{},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := excludeChartByName(tc.charts, tc.remove)
+			if len(got) != len(tc.want) {
+				t.Fatalf("removeChart returned %d charts, want %d", len(got), len(tc.want))
+			}
+			for i, c := range got {
+				if c.ChartName != tc.want[i] {
+					t.Errorf("index %d: got %q, want %q", i, c.ChartName, tc.want[i])
+				}
+			}
+		})
+	}
+}

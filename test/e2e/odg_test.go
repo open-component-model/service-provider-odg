@@ -56,6 +56,7 @@ func TestServiceProvider(t *testing.T) {
 	var onboardingList unstructured.UnstructuredList
 	var tenantNamespace string
 	var chartNames []string
+	var externalDB bool
 
 	basicProviderTest := features.New("provider test").
 		Setup(func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
@@ -216,6 +217,17 @@ func TestServiceProvider(t *testing.T) {
 							t.Errorf("bootstrapping-values secrets missing key %q", key)
 						}
 					}
+					// Detect external DB: any delivery-db entry with a non-empty hostname means
+					// the in-cluster StatefulSet chart is suppressed.
+					if dbMap, ok := secretsMap["delivery-db"].(map[string]any); ok {
+						for _, v := range dbMap {
+							if entry, ok := v.(map[string]any); ok {
+								if h, _ := entry["hostname"].(string); h != "" {
+									externalDB = true
+								}
+							}
+						}
+					}
 				}
 
 				t.Logf("bootstrapping-values Secret contains merged keys: %v", func() []string {
@@ -225,6 +237,26 @@ func TestServiceProvider(t *testing.T) {
 					}
 					return keys
 				}())
+				return ctx
+			},
+		).
+		Assess("verify delivery-db HelmRelease presence matches database mode",
+			func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+				helmRelease := &helmv2.HelmRelease{}
+				err := c.Client().Resources().Get(ctx, "delivery-db", tenantNamespace, helmRelease)
+				if externalDB {
+					if err == nil {
+						t.Errorf("delivery-db HelmRelease should be absent when external DB is configured, but it exists")
+					} else {
+						t.Logf("delivery-db HelmRelease correctly absent (external DB mode)")
+					}
+				} else {
+					if err != nil {
+						t.Errorf("delivery-db HelmRelease should exist when using in-cluster DB, but got: %v", err)
+					} else {
+						t.Logf("delivery-db HelmRelease correctly present (in-cluster DB mode)")
+					}
+				}
 				return ctx
 			},
 		).
@@ -244,7 +276,13 @@ func TestServiceProvider(t *testing.T) {
 					{"backlog-controller", "app", "backlog-controller"},
 					{"delivery-dashboard", "app", "delivery-dashboard"},
 					{"delivery-service", "app", "delivery-service"},
-					{"delivery-db", "app.kubernetes.io/instance", "delivery-db"},
+				}
+				if !externalDB {
+					expectedPods = append(expectedPods, struct {
+						name       string
+						labelKey   string
+						labelValue string
+					}{"delivery-db", "app.kubernetes.io/instance", "delivery-db"})
 				}
 
 				deadline := time.Now().Add(4 * time.Minute)
