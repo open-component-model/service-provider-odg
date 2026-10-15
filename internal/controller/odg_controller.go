@@ -695,7 +695,9 @@ var extensionsCfgGatedCharts = map[string]string{
 
 // syncExtensionsFromBootstrapping reads the enabled flags from the bootstrapping chart's
 // extensions_cfg section, mirrors them (underscore → hyphen key mapping) into the extensions
-// chart's helm values, and removes gated charts that are not enabled.
+// chart's helm values, and removes gated charts that are not enabled. It also suppresses the
+// in-cluster delivery-db chart when an external PostgreSQL hostname is detected in the
+// bootstrapping secrets (see isExternalDatabase).
 func (r *ODGReconciler) syncExtensionsFromBootstrapping(ctx context.Context, svcobj *apiv1alpha1.ODG, providerConfig *apiv1alpha1.ProviderConfig) error {
 	bootstrapValues, found := findHelmValues(providerConfig, "bootstrapping")
 	if !found {
@@ -802,7 +804,8 @@ func isExtensionEnabled(extCfg map[string]any, key string) bool {
 
 // isExternalDatabase returns true when the merged bootstrapping values contain a
 // secrets.delivery-db entry with a non-empty hostname, indicating an external
-// (managed) PostgreSQL instance is configured.
+// (managed) PostgreSQL instance is configured. When true, the caller should
+// suppress the in-cluster delivery-db chart (e.g. via excludeChartByName).
 func isExternalDatabase(bootstrapMap map[string]any) bool {
 	secrets, _ := bootstrapMap["secrets"].(map[string]any)
 	deliveryDB, _ := secrets["delivery-db"].(map[string]any)

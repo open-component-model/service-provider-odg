@@ -446,13 +446,13 @@ func TestIsExternalDatabase(t *testing.T) {
 			want: true,
 		},
 		{
-			name: "optional port and database fields omitted but hostname present returns true",
+			name: "non-map entry in delivery-db is skipped and returns false",
 			input: map[string]any{"secrets": map[string]any{
 				"delivery-db": map[string]any{
-					"local": map[string]any{"username": "u", "password": "p", "hostname": "pg.example.com"},
+					"local": "not-a-map",
 				},
 			}},
-			want: true,
+			want: false,
 		},
 		{
 			name: "multiple entries, only one with hostname returns true",
