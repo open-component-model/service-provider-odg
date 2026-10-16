@@ -78,4 +78,113 @@ spec:
               memory: 256Mi
           persistence:
             mountPath: /data/
+    # otel telemetry — public charts now, SAP-internal registry later (switch =
+    # chartURL + chartPullSecretName: artifactory; see discussions/12-otel/02-…)
+    # otel collector — no operator, no webhook probes, just the collector daemonset
+    - chartName: otel-collector
+      chartURL: ghcr.io/open-telemetry/opentelemetry-helm-charts/opentelemetry-collector
+      chartVersion: 0.139.0
+      # intentionally no chartPullSecretName — public OCI
+      # no layerSelector needed — chart publishes as single-layer
+      helmTimeout: 5m
+      helmValues:
+        mode: daemonset
+        fullnameOverride: otel-collector
+        image:
+          repository: otel/opentelemetry-collector-contrib
+        clusterRole:
+          create: true
+        # presets all default to disabled in chart 0.139.0 — no preset block needed.
+        # filelog needs host log mounts (normally added by the logsCollection preset, which is off).
+        extraVolumes:
+          - name: varlogpods
+            hostPath: {path: /var/log/pods}
+          - name: varlibdockercontainers
+            hostPath: {path: /var/lib/docker/containers}
+        extraVolumeMounts:
+          - {name: varlogpods, mountPath: /var/log/pods, readOnly: true}
+          - {name: varlibdockercontainers, mountPath: /var/lib/docker/containers, readOnly: true}
+        config:
+          extensions:
+            health_check: {}
+          receivers:
+            filelog:
+              include: [/var/log/pods/odg-system_*/*/*.log]
+              start_at: end
+              include_file_path: true
+              operators:
+                - id: container-parser
+                  type: container
+                  add_metadata_from_filepath: true
+                - id: json-parser
+                  type: json_parser
+                  if: 'body matches "^{"'
+            otlp:
+              protocols:
+                grpc:
+                  endpoint: "0.0.0.0:4317"
+            hostmetrics:
+              collection_interval: 30s
+              scrapers:
+                cpu:
+                  metrics:
+                    system.cpu.utilization: {enabled: true}
+                memory:
+                  metrics:
+                    system.memory.utilization: {enabled: true}
+          processors:
+            k8sattributes:
+              auth_type: serviceAccount
+              filter:
+                namespace: odg-system
+              pod_association:
+                - sources:
+                    - from: resource_attribute
+                      name: k8s.pod.uid
+              extract:
+                metadata: [k8s.namespace.name, k8s.pod.name, k8s.deployment.name, k8s.container.name]
+                annotations:
+                  - key: otel.io/pod-logs
+                    from: pod
+            filter/only_annotated:
+              error_mode: ignore
+              logs:
+                log_record:
+                  - 'resource.attributes["k8s.pod.annotation.otel.io/pod-logs"] != "true"'
+            batch:
+              timeout: 5s
+              send_batch_size: 1024
+              send_batch_max_size: 2048
+            memory_limiter:
+              check_interval: 1s
+              limit_mib: 512
+              spike_limit_mib: 128
+          exporters:
+            debug:
+              verbosity: basic
+            prometheus:
+              endpoint: "0.0.0.0:8889"
+              resource_to_telemetry_conversion: {enabled: true}
+          service:
+            extensions: [health_check]
+            telemetry:
+              metrics:
+                level: basic
+            pipelines:
+              logs:
+                receivers: [filelog]
+                processors: [memory_limiter, k8sattributes, filter/only_annotated, batch]
+                exporters: [debug]
+              metrics:
+                receivers: [otlp, hostmetrics]
+                processors: [memory_limiter, batch]
+                exporters: [debug, prometheus]   # prometheus serves :8889 for scraping
+              traces:
+                receivers: [otlp]
+                processors: [memory_limiter, batch]
+                exporters: [debug]
+    - chartName: metrics-operator
+      chartURL: ghcr.io/openmcp-project/charts/metrics-operator
+      chartVersion: v1.2.0   # published tags carry the v prefix
+      # intentionally no chartPullSecretName — public OCI, single-layer artifact (no layerSelector needed)
   pollInterval: 1m

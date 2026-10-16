@@ -47,6 +47,22 @@ spec:
                 items:
                   description: ODGChart defines a Helm chart of ODG that can be installed.
                   properties:
+                    chartLayerSelector:
+                      description: |-
+                        ChartLayerSelector allows selecting a specific blob from an OCI artifact that
+                        contains more than one layer (e.g. upstream .prov provenance side-layers that
+                        flux would otherwise fail to extract). Maps to OCIRepository spec.layerSelector.
+                      properties:
+                        mediaType:
+                          description: MediaType to match, e.g. "application/vnd.cncf.helm.chart.content.v1.tar+gzip".
+                          type: string
+                        operation:
+                          description: Operation to apply, either "extract" or "copy".
+                          enum:
+                          - extract
+                          - copy
+                          type: string
+                      type: object
                     chartName:
                       description: ChartName is a unique name of the Helm chart.
                       type: string
@@ -65,6 +81,13 @@ spec:
                     chartVersion:
                       description: ChartVersion is the tag of the Helm chart to install.
                       type: string
+                    helmTimeout:
+                      description: |-
+                        HelmTimeout overrides ProviderConfig.spec.helmTimeout for this chart only,
+                        for releases that need longer than the default (e.g. operator-driven charts
+                        whose pods have slow admission-webhook startup).
+                      format: duration
+                      type: string
                     helmValues:
                       description: HelmValues are arbitrary Helm values passed directly
                         to the managed HelmRelease.
@@ -75,6 +98,13 @@ spec:
                   - chartVersion
                   type: object
                 type: array
+              helmTimeout:
+                default: 2m
+                description: |-
+                  HelmTimeout is the default timeout for every Helm release, both install and
+                  upgrade. Per-chart override via charts[].helmTimeout. Defaults to 2m.
+                format: duration
+                type: string
               pollInterval:
                 default: 1m
                 description: PollInterval at which the controller requeues to detect

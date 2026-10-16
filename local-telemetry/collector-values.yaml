@@ -1,0 +1,140 @@
+# Collector values for the workload-odg kind cluster.
+# Used by: telemetry.sh collector|all   (helm upgrade --install)
+#
+# Exports to the backends on your Mac via host.docker.internal
+# (Docker Desktop resolves this from inside kind nodes to the host).
+
+mode: daemonset
+fullnameOverride: otel-collector-local
+# ClusterIP Service for OTLP gRPC (4317) — in-cluster target for metrics-operator.
+# NOTE: 8889 (prometheus exporter) is NOT on this Service (chart forbids service.ports);
+# the Mac reaches 8889 by port-forwarding the pod directly (see telemetry.sh).
+service:
+  enabled: true
+# Pod ports: only otlp (4317), ClusterIP-only (no hostPort — the e2e collector owns 4317/4318
+# host ports on this node). All legacy receivers off. The prometheus exporter listens on :8889
+# inside the pod regardless; the Mac reaches it by port-forwarding the pod (telemetry.sh).
+ports:
+  otlp:           { hostPort: null }
+  jaeger-compact: { enabled: false }
+  jaeger-grpc:    { enabled: false }
+  jaeger-thrift:  { enabled: false }
+  zipkin:         { enabled: false }
+  otlp-http:      { enabled: false }
+# No hostPorts anywhere — the e2e collector (odg-system) already occupies 4317/4318 on the
+# single kind node. otlp:4317 is reached in-cluster via the Service; 8889 via pod port-forward.
+image:
+  repository: otel/opentelemetry-collector-contrib
+
+# k8sattributes needs to read pods (+ replicasets for deployment-name) across namespaces.
+# The chart's default rules are namespace-scoped to the release namespace; we watch odg-system.
+clusterRole:
+  create: true
+  rules:
+    - apiGroups: [""]
+      resources: [pods, namespaces]
+      verbs: [get, list, watch]
+    - apiGroups: ["apps"]
+      resources: [replicasets, deployments, daemonsets, statefulsets]
+      verbs: [get, list, watch]
+
+# logsCollection preset is off → the hostPath mounts it would add must be declared.
+extraVolumes:
+  - name: varlogpods
+    hostPath: { path: /var/log/pods }
+  - name: varlibdockercontainers
+    hostPath: { path: /var/lib/docker/containers }
+extraVolumeMounts:
+  - { name: varlogpods, mountPath: /var/log/pods, readOnly: true }
+  - { name: varlibdockercontainers, mountPath: /var/lib/docker/containers, readOnly: true }
+
+config:
+  extensions:
+    health_check: {}
+  receivers:
+    filelog:
+      include: [ /var/log/pods/odg-system_*/*/*.log ]
+      start_at: end
+      include_file_path: true
+      operators:
+        - id: container-parser
+          type: container
+          add_metadata_from_filepath: true
+        - id: json-parser
+          type: json_parser
+          if: 'body matches "^{"'
+    otlp:
+      protocols:
+        grpc:
+          endpoint: "0.0.0.0:4317"
+    hostmetrics:
+      collection_interval: 30s
+      scrapers:
+        cpu:
+          metrics:
+            system.cpu.utilization: { enabled: true }
+        memory:
+          metrics:
+            system.memory.utilization: { enabled: true }
+
+  processors:
+    k8sattributes:
+      auth_type: serviceAccount
+      filter:
+        namespace: odg-system
+      pod_association:
+        - sources:
+            - from: resource_attribute
+              name: k8s.pod.uid
+      extract:
+        metadata: [ k8s.namespace.name, k8s.pod.name, k8s.deployment.name, k8s.container.name ]
+        annotations:
+          - key: otel.io/pod-logs
+            from: pod
+    # only pods annotated otel.io/pod-logs: "true" emit logs
+    filter/only_annotated:
+      error_mode: ignore
+      logs:
+        log_record:
+          - 'resource.attributes["k8s.pod.annotation.otel.io/pod-logs"] != "true"'
+    batch:
+      timeout: 5s
+      send_batch_size: 1024
+      send_batch_max_size: 2048
+    memory_limiter:
+      check_interval: 1s
+      limit_mib: 512
+      spike_limit_mib: 128
+
+  exporters:
+    debug:
+      verbosity: basic
+    # Prometheus exporter: collector SERVES metrics on :8889; the Mac-side Prometheus
+    # scrapes it through a kubectl port-forward (see telemetry.sh). No host-reachability needed.
+    prometheus:
+      endpoint: "0.0.0.0:8889"
+      resource_to_telemetry_conversion: { enabled: true }
+    opensearch:
+      http:
+        endpoint: "http://host.docker.internal:9200"
+      logs_index: logs-otel-v1
+      traces_index: traces-otel-v1
+
+  service:
+    extensions: [ health_check ]
+    telemetry:
+      metrics:
+        level: basic
+    pipelines:
+      logs:
+        receivers: [ filelog ]
+        processors: [ memory_limiter, k8sattributes, batch ]
+        exporters: [ opensearch ]          # filelog include already scopes to odg-system (see filelog.include)
+      metrics:
+        receivers: [ otlp, hostmetrics ]
+        processors: [ memory_limiter, batch ]
+        exporters: [ prometheus ]  # served on :8889, scraped via port-forward
+      traces:
+        receivers: [ otlp ]
+        processors: [ memory_limiter, batch ]
+        exporters: [ opensearch ]

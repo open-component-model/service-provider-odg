@@ -44,6 +44,13 @@ type ProviderConfigSpec struct {
 	// +kubebuilder:default:="1m"
 	// +kubebuilder:validation:Format=duration
 	PollInterval *metav1.Duration `json:"pollInterval,omitempty"`
+
+	// HelmTimeout is the default timeout for every Helm release, both install and
+	// upgrade. Per-chart override via charts[].helmTimeout. Defaults to 2m.
+	// +optional
+	// +kubebuilder:default:="2m"
+	// +kubebuilder:validation:Format=duration
+	HelmTimeout *metav1.Duration `json:"helmTimeout,omitempty"`
 }
 
 // ODGChart defines a Helm chart of ODG that can be installed.
@@ -68,9 +75,36 @@ type ODGChart struct {
 	// +required
 	ChartVersion string `json:"chartVersion"`
 
+	// HelmTimeout overrides ProviderConfig.spec.helmTimeout for this chart only,
+	// for releases that need longer than the default (e.g. operator-driven charts
+	// whose pods have slow admission-webhook startup).
+	// +optional
+	// +kubebuilder:validation:Format=duration
+	HelmTimeout *metav1.Duration `json:"helmTimeout,omitempty"`
+
 	// HelmValues are arbitrary Helm values passed directly to the managed HelmRelease.
 	// +optional
 	HelmValues *apiextensionsv1.JSON `json:"helmValues,omitempty"`
+
+	// ChartLayerSelector allows selecting a specific blob from an OCI artifact that
+	// contains more than one layer (e.g. upstream .prov provenance side-layers that
+	// flux would otherwise fail to extract). Maps to OCIRepository spec.layerSelector.
+	// +optional
+	ChartLayerSelector *ChartLayerSelector `json:"chartLayerSelector,omitempty"`
+}
+
+// ChartLayerSelector selects which layer to extract from an OCI artifact.
+// Mirrors fluxcd source-controller's OCILayerSelector but kept self-contained
+// in this CRD so flux API moves don't force a ProviderConfig schema bump.
+type ChartLayerSelector struct {
+	// MediaType to match, e.g. "application/vnd.cncf.helm.chart.content.v1.tar+gzip".
+	// +optional
+	MediaType string `json:"mediaType,omitempty"`
+
+	// Operation to apply, either "extract" or "copy".
+	// +optional
+	// +kubebuilder:validation:Enum=extract;copy
+	Operation string `json:"operation,omitempty"`
 }
 
 // ProviderConfigStatus defines the observed state of ProviderConfig.

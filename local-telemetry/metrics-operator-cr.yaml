@@ -1,0 +1,33 @@
+# Metrics-operator configuration: which ODG resources to count and where to push.
+# Used by: telemetry.sh metrics   (kubectl apply -f this file)
+#
+# The operator watches the target resources, evaluates the gauge, and pushes OTLP
+# to the collector (grpc :4317), which re-exports to Prometheus via remote-write.
+apiVersion: metrics.open-control-plane.io/v1alpha1
+kind: DataSink
+metadata:
+  name: default
+  namespace: telemetry-local
+spec:
+  connection:
+    endpoint: "grpc://otel-collector-local.telemetry-local.svc.cluster.local:4317"
+---
+apiVersion: metrics.open-control-plane.io/v1alpha1
+kind: Metric
+metadata:
+  name: odg-pods-running
+  namespace: telemetry-local
+spec:
+  name: odg_pods_running
+  description: Count of Running pods in odg-system
+  interval: 1m
+  target:
+    group: ""
+    version: v1
+    kind: Pod
+  dataSinkRef:
+    name: default
+  fieldSelector: "status.phase=Running"
+  projections:
+    - name: pod
+      fieldPath: metadata.name
