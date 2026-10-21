@@ -71,6 +71,55 @@ type ODGChart struct {
 	// HelmValues are arbitrary Helm values passed directly to the managed HelmRelease.
 	// +optional
 	HelmValues *apiextensionsv1.JSON `json:"helmValues,omitempty"`
+
+	// HelmValuesFrom lists ConfigMaps or Secrets in the controller's namespace whose
+	// "values.yaml" data is merged on top of HelmValues, in list order. Keys in later
+	// sources overwrite earlier ones at the leaf level; maps merge recursively. Use
+	// this to layer per-environment or per-landscape overrides (e.g. local telemetry
+	// exporters, BTP credentials) without duplicating the full inline values.
+	// +optional
+	HelmValuesFrom []ValuesSource `json:"helmValuesFrom,omitempty"`
+
+	// ChartLayerSelector allows selecting a specific blob from an OCI artifact that
+	// contains more than one layer (e.g. upstream .prov provenance side-layers that
+	// flux would otherwise fail to extract). Maps to OCIRepository spec.layerSelector.
+	// +optional
+	ChartLayerSelector *ChartLayerSelector `json:"chartLayerSelector,omitempty"`
+}
+
+// ValuesSource references a ConfigMap or Secret in the controller's namespace
+// whose top-level "values.yaml" key holds a YAML document to be merged into the
+// chart's Helm values. Mirrors the structure of flux's HelmRelease spec.valuesFrom
+// but kept self-contained in this CRD.
+type ValuesSource struct {
+	// Kind of the values referent, either ConfigMap or Secret. Defaults to ConfigMap.
+	// +optional
+	// +kubebuilder:default:=ConfigMap
+	// +kubebuilder:validation:Enum=ConfigMap;Secret
+	Kind string `json:"kind,omitempty"`
+
+	// Name of the ConfigMap or Secret in the controller's namespace.
+	// +required
+	Name string `json:"name"`
+
+	// Optional indicates whether reconciliation should fail when the referenced
+	// object is missing. Defaults to false (missing source fails the reconcile).
+	// +optional
+	Optional bool `json:"optional,omitempty"`
+}
+
+// ChartLayerSelector selects which layer to extract from an OCI artifact.
+// Mirrors fluxcd source-controller's OCILayerSelector but kept self-contained
+// in this CRD so flux API moves don't force a ProviderConfig schema bump.
+type ChartLayerSelector struct {
+	// MediaType to match, e.g. "application/vnd.cncf.helm.chart.content.v1.tar+gzip".
+	// +optional
+	MediaType string `json:"mediaType,omitempty"`
+
+	// Operation to apply, either "extract" or "copy".
+	// +optional
+	// +kubebuilder:validation:Enum=extract;copy
+	Operation string `json:"operation,omitempty"`
 }
 
 // ProviderConfigStatus defines the observed state of ProviderConfig.

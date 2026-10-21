@@ -47,6 +47,22 @@ spec:
                 items:
                   description: ODGChart defines a Helm chart of ODG that can be installed.
                   properties:
+                    chartLayerSelector:
+                      description: |-
+                        ChartLayerSelector allows selecting a specific blob from an OCI artifact that
+                        contains more than one layer (e.g. upstream .prov provenance side-layers that
+                        flux would otherwise fail to extract). Maps to OCIRepository spec.layerSelector.
+                      properties:
+                        mediaType:
+                          description: MediaType to match, e.g. "application/vnd.cncf.helm.chart.content.v1.tar+gzip".
+                          type: string
+                        operation:
+                          description: Operation to apply, either "extract" or "copy".
+                          enum:
+                          - extract
+                          - copy
+                          type: string
+                      type: object
                     chartName:
                       description: ChartName is a unique name of the Helm chart.
                       type: string
@@ -69,6 +85,41 @@ spec:
                       description: HelmValues are arbitrary Helm values passed directly
                         to the managed HelmRelease.
                       x-kubernetes-preserve-unknown-fields: true
+                    helmValuesFrom:
+                      description: |-
+                        HelmValuesFrom lists ConfigMaps or Secrets in the controller's namespace whose
+                        "values.yaml" data is merged on top of HelmValues, in list order. Keys in later
+                        sources overwrite earlier ones at the leaf level; maps merge recursively. Use
+                        this to layer per-environment or per-landscape overrides (e.g. local telemetry
+                        exporters, BTP credentials) without duplicating the full inline values.
+                      items:
+                        description: |-
+                          ValuesSource references a ConfigMap or Secret in the controller's namespace
+                          whose top-level "values.yaml" key holds a YAML document to be merged into the
+                          chart's Helm values. Mirrors the structure of flux's HelmRelease spec.valuesFrom
+                          but kept self-contained in this CRD.
+                        properties:
+                          kind:
+                            default: ConfigMap
+                            description: Kind of the values referent, either ConfigMap
+                              or Secret. Defaults to ConfigMap.
+                            enum:
+                            - ConfigMap
+                            - Secret
+                            type: string
+                          name:
+                            description: Name of the ConfigMap or Secret in the controller's
+                              namespace.
+                            type: string
+                          optional:
+                            description: |-
+                              Optional indicates whether reconciliation should fail when the referenced
+                              object is missing. Defaults to false (missing source fails the reconcile).
+                            type: boolean
+                        required:
+                        - name
+                        type: object
+                      type: array
                   required:
                   - chartName
                   - chartURL

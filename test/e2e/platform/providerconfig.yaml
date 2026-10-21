@@ -78,4 +78,22 @@ spec:
               memory: 256Mi
           persistence:
             mountPath: /data/
+    # telemetry — umbrella chart (collector daemonset + metrics-operator + Metric
+    # CRs + NetworkPolicies) from odg-observability. Chart defaults carry the whole
+    # collector config (filelog/k8sattributes/hostmetrics/batch/memory_limiter,
+    # :8889 prometheus exporter, RBAC); only environment knobs live here.
+    - chartName: telemetry
+      chartURL: oci://ghcr.io/alexbass01/charts/telemetry  # TODO: move to a SAP org registry when available
+      chartVersion: 0.2.9
+      # no chartPullSecretName while the ghcr package is public
+      # ghcr sometimes adds a .prov provenance layer; select the real chart blob so
+      # flux doesn't try to extract the .prov one.
+      chartLayerSelector:
+        mediaType: application/vnd.cncf.helm.chart.content.v1.tar+gzip
+        operation: extract
+      helmValues:
+        backend: debug                      # e2e asserts via debug exporter output
+        observedNamespace: odg-system
+        # backend: opensearch would also need opensearch.endpoint; btp needs
+        # btp.endpoint + btp.certsSecret. See chart values.yaml.
   pollInterval: 1m

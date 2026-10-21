@@ -216,7 +216,7 @@ func (r *ODGReconciler) reconcileChart(ctx context.Context, svcobj *apiv1alpha1.
 		return nil, fmt.Errorf("failed to replicate chart pull secret: %w", err)
 	}
 
-	ociRepo, err := r.createOrUpdateOCIRepository(ctx, chart.ChartName, apiv1alpha1.EnsureOCIScheme(*chart.ChartURL), chart.ChartVersion, chart.ChartPullSecretName, tenantNamespace)
+	ociRepo, err := r.createOrUpdateOCIRepository(ctx, chart.ChartName, apiv1alpha1.EnsureOCIScheme(*chart.ChartURL), chart.ChartVersion, chart.ChartPullSecretName, chart.ChartLayerSelector, tenantNamespace)
 	if err != nil {
 		return nil, fmt.Errorf("failed to reconcile OCI Repository: %w", err)
 	}
@@ -232,6 +232,11 @@ func (r *ODGReconciler) reconcileChart(ctx context.Context, svcobj *apiv1alpha1.
 		if err != nil {
 			return nil, fmt.Errorf("failed to merge ODG configuration into helm values: %w", err)
 		}
+	}
+
+	helmValues, err = r.mergeChartValuesFrom(ctx, chart, helmValues)
+	if err != nil {
+		return nil, fmt.Errorf("failed to merge helmValuesFrom for chart %q: %w", chart.ChartName, err)
 	}
 
 	if helmValues != nil {
@@ -369,10 +374,18 @@ func (r *ODGReconciler) IsReferencedSecret(ctx context.Context, secret *corev1.S
 	return false
 }
 
-func createOciRepository(name, chartURL, secretName, chartVersion, namespace string) *sourcev1.OCIRepository {
+func createOciRepository(name, chartURL, secretName, chartVersion string, ls *apiv1alpha1.ChartLayerSelector, namespace string) *sourcev1.OCIRepository {
 	var secretRef *meta.LocalObjectReference
 	if secretName != "" {
 		secretRef = &meta.LocalObjectReference{Name: secretName}
+	}
+
+	var layerSelector *sourcev1.OCILayerSelector
+	if ls != nil {
+		layerSelector = &sourcev1.OCILayerSelector{
+			MediaType: ls.MediaType,
+			Operation: ls.Operation,
+		}
 	}
 
 	return &sourcev1.OCIRepository{
@@ -382,9 +395,10 @@ func createOciRepository(name, chartURL, secretName, chartVersion, namespace str
 			Labels:    map[string]string{managedByLabel: managedByLabelValue},
 		},
 		Spec: sourcev1.OCIRepositorySpec{
-			Interval:  metav1.Duration{Duration: time.Minute},
-			URL:       chartURL,
-			SecretRef: secretRef,
+			Interval:      metav1.Duration{Duration: time.Minute},
+			URL:           chartURL,
+			SecretRef:     secretRef,
+			LayerSelector: layerSelector,
 			Reference: &sourcev1.OCIRepositoryRef{
 				Tag: chartVersion,
 			},
@@ -392,8 +406,8 @@ func createOciRepository(name, chartURL, secretName, chartVersion, namespace str
 	}
 }
 
-func (r *ODGReconciler) createOrUpdateOCIRepository(ctx context.Context, name, chartURL, chartVersion, secretName, namespace string) (*sourcev1.OCIRepository, error) {
-	ociRepository := createOciRepository(name, chartURL, secretName, chartVersion, namespace)
+func (r *ODGReconciler) createOrUpdateOCIRepository(ctx context.Context, name, chartURL, chartVersion, secretName string, ls *apiv1alpha1.ChartLayerSelector, namespace string) (*sourcev1.OCIRepository, error) {
+	ociRepository := createOciRepository(name, chartURL, secretName, chartVersion, ls, namespace)
 	managedObj := &sourcev1.OCIRepository{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ociRepository.Name,
@@ -527,7 +541,7 @@ func (r *ODGReconciler) createOrUpdateValuesSecret(ctx context.Context, name, na
 	return err
 }
 
-func (r *ODGReconciler) createOrUpdateHelmRelease(ctx context.Context, name, tenantNamespace, odgNamespace, valuesSecretName string, svcobj *apiv1alpha1.ODG) (*helmv2.HelmRelease, error) {
+func (r *ODGReconciler) createOrUpdateHelmRelease(ctx context.Context, name string, tenantNamespace, odgNamespace, valuesSecretName string, svcobj *apiv1alpha1.ODG) (*helmv2.HelmRelease, error) {
 	helmRelease, err := r.createHelmRelease(ctx, name, tenantNamespace, odgNamespace, valuesSecretName, svcobj)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create helm release: %w", err)
@@ -551,7 +565,7 @@ func (r *ODGReconciler) createOrUpdateHelmRelease(ctx context.Context, name, ten
 	return managedObj, nil
 }
 
-func (r *ODGReconciler) createHelmRelease(ctx context.Context, name, tenantNamespace, odgNamespace, valuesSecretName string, svcobj *apiv1alpha1.ODG) (*helmv2.HelmRelease, error) {
+func (r *ODGReconciler) createHelmRelease(ctx context.Context, name string, tenantNamespace, odgNamespace, valuesSecretName string, svcobj *apiv1alpha1.ODG) (*helmv2.HelmRelease, error) {
 	fluxConfigRef, err := r.getWorkloadFluxConfig(ctx, tenantNamespace, svcobj.Name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get FluxConfig: %w", err)
@@ -571,7 +585,6 @@ func (r *ODGReconciler) createHelmRelease(ctx context.Context, name, tenantNames
 			Install: &helmv2.Install{
 				CRDs:            helmv2.Create,
 				CreateNamespace: true,
-				Timeout:         &metav1.Duration{Duration: 2 * time.Minute},
 				Remediation: &helmv2.InstallRemediation{
 					Retries: 1,
 				},
@@ -934,6 +947,67 @@ func (r *ODGReconciler) mergeODGConfiguration(ctx context.Context, base *apiexte
 	}
 
 	return result, nil
+}
+
+// mergeChartValuesFrom merges ConfigMap/Secret values listed in chart.HelmValuesFrom
+// on top of base for any chart. Sources are read from the controller's pod namespace
+// on the platform cluster and merged in list order (later wins on leaf conflicts).
+func (r *ODGReconciler) mergeChartValuesFrom(ctx context.Context, chart apiv1alpha1.ODGChart, base *apiextensionsv1.JSON) (*apiextensionsv1.JSON, error) {
+	result := base
+	for i, src := range chart.HelmValuesFrom {
+		overlay, refDesc, err := r.loadValuesSource(ctx, src)
+		if err != nil {
+			return nil, fmt.Errorf("helmValuesFrom[%d] %s: %w", i, refDesc, err)
+		}
+		if overlay == nil {
+			// optional and not found
+			continue
+		}
+		if result, err = mergeHelmValues(result, overlay); err != nil {
+			return nil, fmt.Errorf("helmValuesFrom[%d] %s: %w", i, refDesc, err)
+		}
+	}
+	return result, nil
+}
+
+// loadValuesSource resolves one HelmValuesFrom entry to its overlay JSON. Returns
+// (nil, refDesc, nil) when the reference is optional and the object is missing.
+func (r *ODGReconciler) loadValuesSource(ctx context.Context, src apiv1alpha1.ValuesSource) (*apiextensionsv1.JSON, string, error) {
+	kind := src.Kind
+	if kind == "" {
+		kind = "ConfigMap"
+	}
+	ref := fmt.Sprintf("%s/%s", kind, src.Name)
+
+	var data []byte
+	var err error
+	switch kind {
+	case "ConfigMap":
+		cm := &corev1.ConfigMap{}
+		if err = r.PlatformCluster.Client().Get(ctx, client.ObjectKey{Name: src.Name, Namespace: r.PodNamespace}, cm); err == nil {
+			data = []byte(cm.Data["values.yaml"])
+		}
+	case "Secret":
+		sec := &corev1.Secret{}
+		if err = r.PlatformCluster.Client().Get(ctx, client.ObjectKey{Name: src.Name, Namespace: r.PodNamespace}, sec); err == nil {
+			data = sec.Data["values.yaml"]
+		}
+	default:
+		return nil, ref, fmt.Errorf("unsupported kind %q", kind)
+	}
+
+	if err != nil {
+		if apierrors.IsNotFound(err) && src.Optional {
+			return nil, ref, nil
+		}
+		return nil, ref, fmt.Errorf("get: %w", err)
+	}
+
+	overlay, err := dataToJSON(data)
+	if err != nil {
+		return nil, ref, fmt.Errorf("values.yaml: %w", err)
+	}
+	return overlay, ref, nil
 }
 
 // dataToJSON converts raw YAML or JSON bytes to canonical JSON for merging.
