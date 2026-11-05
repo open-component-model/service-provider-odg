@@ -1,0 +1,12 @@
+# Mac-side Prometheus SCRAPES the in-cluster collector through a kubectl
+# port-forward (telemetry.sh opens localhost:8889 -> collector :8889).
+# No remote-write, no host.docker.internal dependency for metrics.
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: otel-collector
+    static_configs:
+      # From the Prometheus container, host.docker.internal = the Mac, where the
+      # kubectl port-forward (:8889 -> collector pod) is bound.
+      - targets: [host.docker.internal:8889]

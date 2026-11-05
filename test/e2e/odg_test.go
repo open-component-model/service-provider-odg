@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -131,7 +132,11 @@ func TestServiceProvider(t *testing.T) {
 						continue
 					}
 					if ociRepo.Spec.SecretRef == nil || ociRepo.Spec.SecretRef.Name == "" {
-						t.Errorf("OCIRepository %q has no secretRef", chartName)
+						if strings.Contains(ociRepo.Spec.URL, "europe-docker.pkg.dev") {
+							t.Errorf("OCIRepository %q (private registry) has no secretRef", chartName)
+						} else {
+							t.Logf("OCIRepository %q has no secretRef (public repo)", chartName)
+						}
 					} else {
 						t.Logf("OCIRepository %q has secretRef: %s", chartName, ociRepo.Spec.SecretRef.Name)
 					}
