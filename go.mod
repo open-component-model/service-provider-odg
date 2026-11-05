@@ -3,9 +3,9 @@ module github.com/open-component-model/service-provider-odg
 go 1.27.3
 
 require (
-	github.com/fluxcd/helm-controller/api v1.6.5
-	github.com/fluxcd/pkg/apis/meta v1.37.0
-	github.com/fluxcd/source-controller/api v1.9.6
+	github.com/fluxcd/helm-controller/api v1.7.1
+	github.com/fluxcd/pkg/apis/meta v1.38.0
+	github.com/fluxcd/source-controller/api v1.10.1
 	github.com/openmcp-project/controller-utils v0.33.3
 	github.com/openmcp-project/opencontrolplane-runtime v1.4.2
 	github.com/openmcp-project/openmcp-operator/api v1.4.4
@@ -38,7 +38,7 @@ require (
 	github.com/felixge/httpsnoop v1.1.0 // indirect
 	github.com/fluxcd/flux2/v2 v2.9.6 // indirect
 	github.com/fluxcd/kustomize-controller/api v1.9.6 // indirect
-	github.com/fluxcd/pkg/apis/acl v0.10.0 // indirect
+	github.com/fluxcd/pkg/apis/acl v0.12.0 // indirect
 	github.com/fluxcd/pkg/apis/kustomize v1.23.0 // indirect
 	github.com/fluxcd/pkg/kustomize v1.35.7 // indirect
 	github.com/fluxcd/pkg/tar v1.2.0 // indirect
