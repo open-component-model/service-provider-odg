@@ -6,6 +6,7 @@ metadata:
     controller-gen.kubebuilder.io/version: v0.23.0
   labels:
     openmcp.cloud/cluster: onboarding
+    services.open-control-plane.io/kind: ODG
   name: odgs.odg.services.open-control-plane.io
 spec:
   group: odg.services.open-control-plane.io

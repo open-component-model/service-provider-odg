@@ -114,6 +114,7 @@ type ODGStatus struct {
 // +kubebuilder:printcolumn:JSONPath=`.status.deliveryServiceURL`,name="API",type=string,priority=1
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:metadata:labels="openmcp.cloud/cluster=onboarding"
+// +kubebuilder:metadata:labels="services.open-control-plane.io/kind=ODG"
 type ODG struct {
 	metav1.TypeMeta `json:",inline"`
 
