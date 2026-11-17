@@ -1,6 +1,6 @@
 module github.com/open-component-model/service-provider-odg
 
-go 1.27.3
+go 1.27.4
 
 require (
 	github.com/fluxcd/helm-controller/api v1.6.5
