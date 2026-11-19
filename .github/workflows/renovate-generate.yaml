@@ -4,14 +4,55 @@ on:
   push:
     branches:
       - "renovate/**"
+  workflow_dispatch:
 
-permissions:
-  contents: write
+# This workflow runs on every push to renovate/** — before review or merge —
+# so it must execute only repo-owned code. Inlined from
+# openmcp-project/build's renovate-generate.lib.yaml with two deliberate
+# changes:
+#   1. Checkout runs WITHOUT submodules, so a bumped hack/common is never
+#      materialized on the runner.
+#   2. Generation calls hack/generate.sh (repo-owned) instead of the
+#      submodule-provided `task generate`.
+# `secrets: inherit` is gone; the ODG bot app credentials are referenced
+# explicitly below, via the same `renovate` environment the odg-renovate
+# workflows use (vars.ODG_BOT_APP_ID / secrets.ODG_BOT_PRIVATE_KEY are
+# scoped to that environment).
+permissions: {}
 
 jobs:
   generate:
-    uses: openmcp-project/build/.github/workflows/renovate-generate.lib.yaml@29f21b1f38bf9a8e37e00fcebce30660e9eb1b93 # main
-    secrets: inherit
-    with:
-      app_id: ${{ vars.ODG_BOT_APP_ID }}
-      github-environment: automation
+    runs-on: ubuntu-26.04
+    environment:
+      name: renovate
+      deployment: false
+    permissions:
+      contents: write
+    steps:
+      - name: Create GitHub App token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
+        id: app-token
+        with:
+          app-id: ${{ vars.ODG_BOT_APP_ID }}
+          private-key: ${{ secrets.ODG_BOT_PRIVATE_KEY }}
+
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.ref_name }}
+          token: ${{ steps.app-token.outputs.token }}
+          # No `submodules: recursive` on purpose — see header comment.
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+
+      - name: Run code generation
+        run: ./hack/generate.sh
+
+      - name: Commit generated files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git diff --quiet || (git add -A && git commit -m "chore: regenerate after dependency update" && git push)
