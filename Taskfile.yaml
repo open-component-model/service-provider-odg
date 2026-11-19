@@ -19,8 +19,22 @@ includes:
   shared:
     taskfile: hack/common/Taskfile_controller.yaml
     flatten: true
+    # `generate` is excluded from the submodule include and defined below:
+    # workflows like renovate-generate execute generation on unreviewed
+    # renovate/** branches, so it must run repo-owned code.
+    excludes: [generate]
 
 tasks:
+  # Explicit `generate` replaces the hack/common task of the same name:
+  # generation logic lives in repo-owned hack/generate.sh, so pre-review
+  # workflows (renovate-generate, gating CI) never execute submodule-
+  # provided code.
+  generate:
+    desc: "  Run code generation (repo-owned, see hack/generate.sh)."
+    run: once
+    cmds:
+      - ./hack/generate.sh
+
   install-flux:
     desc: "Install Flux CLI for e2e tests"
     vars:

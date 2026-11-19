@@ -163,5 +163,16 @@
         '# renovate: datasource=(?<datasource>[^\\s]+) depName=(?<depName>[^\\s]+)\\s+\\w+_VERSION:\\s*[\'"]?(?<currentValue>[^\\s\'"]+)',
       ],
     },
+    {
+      // Tool version pins in shell scripts (hack/generate.sh), annotated on
+      // the preceding line:
+      //   # renovate: datasource=github-releases depName=kubernetes-sigs/controller-tools
+      //   CONTROLLER_GEN_VERSION=v0.16.1
+      customType: 'regex',
+      managerFilePatterns: ['/hack/[^/]+\\.sh$/'],
+      matchStrings: [
+        '# renovate: datasource=(?<datasource>[^\\s]+) depName=(?<depName>[^\\s]+)\\s+\\w+_VERSION=[\'"]?(?<currentValue>[^\\s\'"]+)',
+      ],
+    },
   ],
 }
